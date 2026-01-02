@@ -8,8 +8,10 @@ from multiprocessing import Queue
 
 def run_test():
     # Target File
-    target_file = r"C:\Users\aarav\Downloads\c47fa6f4-c064-4214-a767-8e5708ad20c6\output.stl"
-    output_file = r"C:\Users\aarav\Downloads\c47fa6f4-c064-4214-a767-8e5708ad20c6\test_result.stl"
+    # Dynamic paths for portability
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    target_file = os.path.join(base_dir, "temp_uploads", "test_input.stl")
+    output_file = os.path.join(base_dir, "fixed_meshes", "test_result.stl")
     
     if not os.path.exists(target_file):
         print(f"CRITICAL: Test file not found: {target_file}")
