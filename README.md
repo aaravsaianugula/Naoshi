@@ -10,14 +10,10 @@ A powerful, local-first 3D mesh repair and editing studio. Designed to fix broke
     -   Clone this repository: `git clone https://github.com/your-username/mesher.git`
     -   *Or* Download and extract the ZIP.
 
-2.  **Run**:
-    Double-click **`start.bat`**. 
-    
-    That's it! This script will automatically:
-    -   Create an isolated virtual environment (`venv`).
-    -   Install all dependencies.
-    -   Launch the backend server.
-    -   Open the app in your browser at `http://localhost:8000`.
+2.  **Install & Run**:
+    -   Double-click **`install.bat`** (Run once to setup).
+    -   A **Mesher** shortcut will appear on your Desktop.
+    -   Double-click the Desktop Shortcut (or **`start.bat`**) to launch.
 
 ## Features
 

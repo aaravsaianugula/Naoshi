@@ -412,8 +412,177 @@ class ZenMesher {
 
         // Handle Projected Geometry (LineSegments) which has no shape data
         if (sketch.userData.isProjection) {
-            this.showToast('Info: Create a closed loop using Line/Rect tools to extrude.');
-            // Ideally we would function to auto-detect loops here, but for now just warn
+            // Auto-detect loops from line segments
+            const geometry = sketch.geometry;
+            const positions = geometry.attributes.position.array;
+
+            // 1. Build Adjacency Graph
+            // Map: "x,y,z" (string) -> { point: Vector3, param: t, id: int }
+            // Actually just need to link indices.
+            // Since segments are disconnected lines, we need to merge vertices.
+
+            const tol = 1e-4;
+            const points = [];
+
+            // Helper to get/add unique point index
+            const getPointId = (x, y, z) => {
+                for (let i = 0; i < points.length; i++) {
+                    const p = points[i];
+                    if (Math.abs(p.x - x) < tol && Math.abs(p.z - z) < tol) { // Ignore Y (flat plane)
+                        return i;
+                    }
+                }
+                points.push(new THREE.Vector3(x, y, z));
+                return points.length - 1;
+            };
+
+            const edges = []; // [startId, endId]
+
+            for (let i = 0; i < positions.length; i += 6) {
+                const id1 = getPointId(positions[i], positions[i + 1], positions[i + 2]);
+                const id2 = getPointId(positions[i + 3], positions[i + 4], positions[i + 5]);
+                if (id1 !== id2) {
+                    edges.push([id1, id2]);
+                }
+            }
+
+            // 2. Find Loop
+            // Simply: Start at a node with degree 2. Traverse.
+            // Build adjacency map: id -> [neighbors]
+            const adj = new Map();
+            edges.forEach(([a, b]) => {
+                if (!adj.has(a)) adj.set(a, []);
+                if (!adj.has(b)) adj.set(b, []);
+                adj.get(a).push(b);
+                adj.get(b).push(a);
+            });
+
+            // Find a valid start node (degree >= 2)
+            let startNode = -1;
+            for (const [id, neighbors] of adj.entries()) {
+                if (neighbors.length >= 2) {
+                    startNode = id;
+                    break;
+                }
+            }
+
+            if (startNode === -1) {
+                this.showToast('Error: No closed loops found in projection');
+                return;
+            }
+
+            // Walk the loop
+            const loopPath = [startNode];
+            const visited = new Set([startNode]);
+            let curr = startNode;
+            let prev = -1;
+            let foundLoop = false;
+
+            // Simple greedy walk
+            // This assumes a simple single loop. Intersections/branches might break it.
+            while (true) {
+                const neighbors = adj.get(curr);
+                let next = -1;
+
+                for (const n of neighbors) {
+                    if (n !== prev) {
+                        // Check if weclosed the loop
+                        if (n === startNode && loopPath.length > 2) {
+                            foundLoop = true;
+                            break; // Done
+                        }
+                        if (!visited.has(n)) {
+                            next = n;
+                            break;
+                        }
+                    }
+                }
+
+                if (foundLoop) break;
+
+                if (next !== -1) {
+                    visited.add(next);
+                    loopPath.push(next);
+                    prev = curr;
+                    curr = next;
+                } else {
+                    // Dead end
+                    break;
+                }
+            }
+
+            if (!foundLoop) {
+                this.showToast('Error: Geometry is not a closed loop');
+                return;
+            }
+
+            // 3. Create Shape
+            const newShape = new THREE.Shape();
+            const p0 = points[loopPath[0]];
+            // Map 3D (x,z) to 2D shape (x,y) because shape extrudes along Z usually?
+            // Actually ExtrudeGeometry extrudes along Z. 
+            // Our sketch is on XZ plane. We should create shape in XY plane and rotate mesh?
+            // Yes, standard is Shape in XY, Extrusion creates volume along Z.
+            // Then we rotate the result -Math.PI/2 around X to lay it flat.
+
+            newShape.moveTo(p0.x, p0.z);
+            for (let i = 1; i < loopPath.length; i++) {
+                const p = points[loopPath[i]];
+                newShape.lineTo(p.x, p.z);
+            }
+            // Close handled by fill
+
+            // Proceed with this shape
+            // Hack: assign it to local var 'shape' by mutating
+            // refactoring a bit to avoid duplication would be better but blocking edit is safer
+
+            // Let's just create the mesh here and return to avoid complex flow control in this replaced block
+
+            const extrudeSettings = { depth: 20, bevelEnabled: false };
+            const geom = new THREE.ExtrudeGeometry(newShape, extrudeSettings);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0xF59E0B, // Keep orange-ish for projection source
+                metalness: 0.1, roughness: 0.5, side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+
+            // Transformations
+            // Shape x,y -> Mesh x,y. Extrude -> z.
+            // We want Shape x -> World x, Shape y -> World z. Extrude -> World y?
+            // Wait.
+            // Points were (x, z).
+            // Shape created with (x, z).
+            // Extrusion is along Z axis of the geometry.
+            // So geometry has width X, height Y (was Z), depth Z (extrusion).
+            // We want result to sit on ground.
+            // Result geometry: X=x, Y=z, Z=extrusion.
+            // We want Z=extrusion to be UP (World Y).
+            // So: rotate -90 X? 
+            // Original: (x,y,z) -> (x, -z, y).
+            // Let's try standard rotation.
+
+            mesh.rotation.x = -Math.PI / 2; // This aligns +Z (extrusion) to +Y (World Up)? No.
+            // ThreeJS cylinder/extrude defaults +Z is axis? No, Extrude is +Z.
+            // If we rotate -90 X:
+            // Local X -> World X
+            // Local Y -> World Z (flattened face)
+            // Local Z -> World Y (up)
+            // This seems correct if Shape coords were (x, z).
+            // Wait, if Shape(x, z), then Local Y is World Z. Correct.
+
+            // Position: Center? No, keep absolute coords.
+            mesh.position.set(0, 0, 0);
+
+            mesh.userData.isShape = true;
+            mesh.userData.originalColor = 0xF59E0B;
+
+            this.viewer.scene.remove(sketch);
+            this.sketches = this.sketches.filter(s => s !== sketch);
+
+            this.viewer.scene.add(mesh);
+            this.shapes.push(mesh);
+            this.selectShape(mesh);
+            this.showToast('Projected loop extruded!');
             return;
         }
 
@@ -1135,11 +1304,8 @@ class ZenMesher {
                 this.ui.infoVertices.textContent = stats.vertices.toLocaleString();
                 this.ui.infoFaces.textContent = stats.faces.toLocaleString();
             }
-            // Update Analysis Status to Ready immediately
-            if (this.ui.infoWaterproof) {
-                this.ui.infoWaterproof.textContent = "Ready to Scan";
-                this.ui.infoWaterproof.style.color = "var(--color-text-secondary)";
-            }
+            // Trigger automatic validation
+            this.validateMesh();
         });
     }
 

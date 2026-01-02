@@ -4,4 +4,5 @@ __pycache__/
 temp_uploads/
 fixed_meshes/
 .DS_Store
+node_modules/
 .vscode/

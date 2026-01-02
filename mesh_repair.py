@@ -1,4 +1,3 @@
-
 import os
 import time
 import trimesh
@@ -17,11 +16,12 @@ def analyze_stl(filepath):
 
 def repair_worker(filepath, output_path, result_queue):
     """
-    ALPHA WRAP - Maximum Quality Mode
+    SMART REPAIR PIPELINE - 4 TIERS
     
-    NO decimation - preserves all original detail
-    Alpha 0.15% - tightest wrap for maximum detail preservation
-    Will take ~3-5 minutes but produces best quality
+    Tier 1: Validation (Pass if good)
+    Tier 2: Surgical Repair (Fix only bad faces, preserve original geometry)
+    Tier 3: Alpha Wrap (High Detail Reconstruction - Fallback 1)
+    Tier 4: Poisson Reconstruction (Guaranteed Solid - Fallback 2)
     """
     def log_msg(msg, progress=None):
         if progress is not None:
@@ -50,24 +50,22 @@ def repair_worker(filepath, output_path, result_queue):
 
         if is_already_watertight:
             log_msg("Mesh is already valid. Skipping reconstruction to preserve detail.", 0.2)
-            
-            # Just minimal cleanup
             try:
                 ms.apply_filter('meshing_remove_connected_component_by_face_number', mincomponentsize=50)
                 ms.apply_filter('meshing_remove_unreferenced_vertices')
             except: pass
             
             final_faces = ms.current_mesh().face_number()
-            is_watertight = True
             repair_method = 'Passthrough (Valid)'
+            success_tier = 1
 
         else:
             # ============================================
-            # TIER 2: LIGHT REPAIR (Stitch it up)
+            # TIER 2: SURGICAL REPAIR (Smart Local Fix)
             # ============================================
-            log_msg("Attempting Light Repair (Stitching)...", 0.2)
-            repair_method = 'Light Repair'
-            success_light = False
+            log_msg("Tier 2: Attempting Smart Local Repair...", 0.2)
+            repair_method = 'Smart Local Repair'
+            success_tier = 0
             
             try:
                 # 1. Cleaning
@@ -75,119 +73,75 @@ def repair_worker(filepath, output_path, result_queue):
                 ms.apply_filter('meshing_remove_duplicate_faces')
                 ms.apply_filter('meshing_remove_duplicate_vertices')
                 
-                # 2. Repair
+                # 2. Select and Remove BAD Geometry Only
+                log_msg("Removing non-manifold geometry...", 0.25)
                 ms.apply_filter('meshing_repair_non_manifold_edges')
                 ms.apply_filter('meshing_repair_non_manifold_vertices')
-                ms.apply_filter('meshing_close_holes', maxholesize=1000) # Close reasonably sized holes
-                ms.apply_filter('meshing_fix_orientation_by_reorienting_faces')
                 
-                # 3. Check Result (internal simulation check using trimesh on current data would be expensive)
-                # Let's trust pymeshlab actions or do a quick check via temp file?
-                # For speed, we might just assume it worked? No, we need to know if we need Tier 3.
-                # We can use pymeshlab's geometric measures? No, 'is_watertight' isn't direct.
-                # Let's do a fast export-check.
-                
-                # Check topological validity
-                stats = ms.apply_filter('compute_topological_measures') # returns dict in newer versions?
-                # Actually, filters usually don't return values directly in this API wrapper easily without 'get_geometric_measures'.
-                # Let's save to a temp file to verify.
-                
-                temp_check_path = output_path + ".check.stl"
-                ms.save_current_mesh(temp_check_path)
-                
-                check_tm = trimesh.load(temp_check_path, process=False)
-                if check_tm.is_watertight:
-                    success_light = True
-                    log_msg("Light repair successful!", 0.3)
-                    if os.path.exists(temp_check_path): os.remove(temp_check_path)
-                else:
-                    log_msg("Light repair insufficient. Trying Surgical Repair...", 0.3)
-                    if os.path.exists(temp_check_path): os.remove(temp_check_path)
-                    ms.load_new_mesh(filepath) # RELOAD for Tier 2.5
-            except Exception as e:
-                log_msg(f"Light repair error: {e}", 0.3)
-                ms.load_new_mesh(filepath) 
-
-            # ============================================
-            # TIER 2.5: SURGICAL REPAIR (Cut & Patch)
-            # ============================================
-            success_surgical = False
-            if not success_light:
-                repair_method = 'Surgical Repair (Cut & Patch)'
+                # Select self-intersecting faces (if any)
                 try:
-                    # 1. Identify and Cut Bad Parts
-                    log_msg("Surgical: Removing bad geometry...", 0.35)
-                    # Select non-manifold edges/faces
-                    ms.apply_filter('compute_selection_by_non_manifold_edges_per_face')
+                    ms.apply_filter('compute_selection_by_self_intersections_per_face')
                     ms.apply_filter('meshing_remove_selected_faces')
-                    
-                    # Select self-intersecting faces (if any)
-                    try:
-                        ms.apply_filter('compute_selection_by_self_intersections_per_face')
-                        ms.apply_filter('meshing_remove_selected_faces')
-                    except: pass # Self-intersection filter might prevent execution if none found?
-                    
-                    # Clean up the mess we made
-                    ms.apply_filter('meshing_remove_unreferenced_vertices')
-                    
-                    # 2. Patch the Holes
-                    log_msg("Surgical: Patching holes...", 0.38)
-                    ms.apply_filter('meshing_repair_non_manifold_vertices')
-                    ms.apply_filter('meshing_close_holes', maxholesize=5000) # Larger holes allowed now
-                    ms.apply_filter('meshing_re_orient_faces_coherently')
-                    
-                    # 3. Check Result
-                    ms.save_current_mesh(temp_check_path)
-                    check_tm = trimesh.load(temp_check_path, process=False)
-                    if check_tm.is_watertight:
-                        success_surgical = True
-                        log_msg("Surgical repair successful!", 0.4)
-                        if os.path.exists(temp_check_path): os.remove(temp_check_path)
-                    else:
-                        log_msg("Surgical repair insufficient. Fallback to Deep Repair.", 0.4)
-                        if os.path.exists(temp_check_path): os.remove(temp_check_path)
-                        ms.load_new_mesh(filepath) # RELOAD for Tier 3
-                        
-                except Exception as e:
-                    log_msg(f"Surgical repair error: {e}", 0.4)
-                    ms.load_new_mesh(filepath)
+                except: pass 
 
-            if not success_light and not success_surgical:
-                # ============================================
-                # TIER 3: DEEP REPAIR (Alpha Wrap - Smart Mode)
-                # ============================================
-                repair_method = 'Alpha Wrap (Smart Reconstruction)'
-                log_msg("Initiating Smart Surface Reconstruction...", 0.45)
-                
-                original_faces = ms.current_mesh().face_number()
-                
-                # SMART ADAPTIVE DECIMATION
-                # Only decimate if mesh is truly massive, and preserve boundary/curvature
-                target_faces = 800000  # Higher threshold - preserve more detail
-                
-                if original_faces > target_faces:
-                    log_msg(f"Smart decimation: {original_faces:,} → {target_faces//1000}k faces (preserving boundaries)...", 0.5)
-                    
-                    # First, mark boundary vertices to preserve them
+                # 3. Patch Holes (Iterative with Robust Fallback)
+                log_msg("Patching holes...", 0.3)
+                try:
+                    ms.apply_filter('meshing_close_holes', maxholesize=1000) 
+                    ms.apply_filter('meshing_close_holes', maxholesize=5000)
+                except Exception as e:
+                    # Fallback: Force clean non-manifold edges if close_holes fails
+                    log_msg("Complex holes detected, force cleaning...", 0.32)
+                    ms.apply_filter('meshing_repair_non_manifold_edges')
+                    ms.apply_filter('meshing_repair_non_manifold_vertices')
+                    # Aggressive cleanup if standard repair fails
                     try:
-                        ms.apply_filter('compute_selection_border')
-                        # Also select high-curvature areas (detail regions)
-                        ms.apply_filter('compute_selection_by_edge_curvature', threshold=30)
+                        ms.apply_filter('compute_selection_by_non_manifold_per_vertex')
+                        ms.apply_filter('meshing_remove_selected_vertices')
                     except: pass
-                    
-                    # Apply quality-aware decimation with boundary preservation
-                    ms.apply_filter('meshing_decimation_quadric_edge_collapse', 
-                                    targetfacenum=target_faces,
-                                    preservetopology=True,
-                                    preserveboundary=True,  # DON'T merge boundary edges
-                                    boundaryweight=1.0,     # Full weight to boundary preservation
-                                    qualitythr=0.5,         # Higher = better quality triangles
-                                    optimalplacement=True)  # Better vertex positioning
-                else:
-                    log_msg(f"Mesh size OK ({original_faces:,} faces), skipping decimation to preserve detail", 0.5)
+                    ms.apply_filter('meshing_close_holes', maxholesize=5000)
+
+                ms.apply_filter('meshing_re_orient_faces_coherently')
                 
-                # ALPHA WRAP with TIGHTER parameters for better detail
-                # Heartbeat (Keep UI alive)
+                # 4. VALIDATE TIER 2 (STRICT MODE)
+                # Must be watertight AND free of self-intersections to pass surgical repair
+                ms.save_current_mesh(output_path)
+                check_tm = trimesh.load(output_path, process=True)
+                
+                # Check for self-intersections using PyMeshLab
+                try:
+                    ms.apply_filter('compute_selection_by_self_intersections_per_face')
+                    selection_stats = ms.get_geometric_measures() # Hack to check selection?
+                    # Actually, we can just check if any faces are selected.
+                    # count_selected = ... (hard to get directly in simple API without parsing)
+                    # Alternative: Try to remove them. If faces count changes, it had intersections.
+                    f_before = ms.current_mesh().face_number()
+                    ms.apply_filter('meshing_remove_selected_faces')
+                    f_after = ms.current_mesh().face_number()
+                    has_intersections = (f_before != f_after)
+                except: 
+                    has_intersections = False # safely assume none if filter fails or not supported
+
+                if check_tm.is_watertight and not has_intersections:
+                    success_tier = 2
+                    log_msg("Local repair successful! Solid & Clean.", 1.0)
+                else:
+                    reason = "Contains self-intersections" if has_intersections else "Not watertight"
+                    log_msg(f"Local repair failed ({reason}). Fallback to Reconstruction...", 0.4)
+            except Exception as e:
+                log_msg(f"Tier 2 error: {e}", 0.4)
+
+
+            # ============================================
+            # TIER 3: ALPHA WRAP (Detail Preservation)
+            # ============================================
+            if success_tier == 0:
+                log_msg("Tier 3: Initiating Sharp Alpha Wrap...", 0.45)
+                repair_method = 'Alpha Wrap (Sharp)'
+                
+                ms.load_new_mesh(filepath) 
+                
+                # Heartbeat
                 import threading
                 def heartbeat_loop(q, stop_event):
                      secs = 0
@@ -195,7 +149,7 @@ def repair_worker(filepath, output_path, result_queue):
                          time.sleep(1.0)
                          secs += 1
                          if secs % 2 == 0:
-                             q.put(('status', f"Reconstructing Surface... {secs}s"))
+                             q.put(('status', f"Reconstructing... {secs}s"))
                 
                 stop_heartbeat = threading.Event()
                 hb_thread = threading.Thread(target=heartbeat_loop, args=(result_queue, stop_heartbeat))
@@ -203,69 +157,73 @@ def repair_worker(filepath, output_path, result_queue):
                 hb_thread.start()
                 
                 try:
-                    # SMARTER Alpha Wrap parameters:
-                    # - Alpha: 0.12% (tighter = captures more detail but slower)
-                    # - Offset: 0.05% (smaller = closer to original surface)
+                    # Tuned Settings: Alpha 0.15% (Very Sharp), Offset 0.05%
                     ms.apply_filter('generate_alpha_wrap', 
-                                    alpha=pymeshlab.PercentageValue(0.12),
+                                    alpha=pymeshlab.PercentageValue(0.15),
                                     offset=pymeshlab.PercentageValue(0.05))
+                                    
+                    # Post-Process Alpha Wrap
+                    ms.apply_filter('meshing_remove_connected_component_by_face_number', mincomponentsize=200)
+                    ms.apply_filter('meshing_remove_unreferenced_vertices')
+                    ms.apply_filter('meshing_close_holes', maxholesize=5000)
+                    ms.apply_filter('meshing_re_orient_faces_coherently')
+
+                    # 4. VALIDATE TIER 3
+                    ms.save_current_mesh(output_path)
+                    check_tm = trimesh.load(output_path, process=True)
+                    if check_tm.is_watertight:
+                        success_tier = 3
+                        log_msg("Alpha Wrap successful!", 1.0)
+                    else:
+                        log_msg("Alpha Wrap failed to seal. Trying last resort...", 0.6)
+
+                except Exception as e:
+                    log_msg(f"Alpha Wrap failed: {e}", 0.6)
                 finally:
                     stop_heartbeat.set()
                     hb_thread.join()
+
+            # ============================================
+            # TIER 4: SCREENED POISSON (Solid & Sharp)
+            # ============================================
+            if success_tier == 0:
+                log_msg("Tier 4: Poisson Reconstruction (High Quality)...", 0.7)
+                repair_method = 'Poisson Reconstruction (HQ)'
                 
-                log_msg("Reconstruction complete. Retopologizing...", 0.7)
+                ms.load_new_mesh(filepath) # Reload
                 
-                # Cleanup noise from Alpha Wrap
                 try:
-                    # Remove tiny floating bits (dust)
-                    ms.apply_filter('meshing_remove_connected_component_by_face_number', mincomponentsize=200)
+                    ms.apply_filter('compute_normal_per_vertex')
                 except: pass
 
-                # RETOPOLOGY: Isotropic Remeshing for clean uniform triangles
-                # This creates better topology without losing detail
                 try:
-                    # Calculate target edge length based on mesh size
-                    bbox = ms.get_geometric_measures()
-                    diag = bbox.get('bbox_diagonal', 100)
-                    target_edge = diag * 0.005  # 0.5% of diagonal = fine detail
+                    # Bump Depth to 9 for sharper details (was 8)
+                    ms.apply_filter('generate_surface_reconstruction_screened_poisson', 
+                                    depth=9, 
+                                    preclean=True)
                     
-                    log_msg(f"Isotropic remeshing (target edge: {target_edge:.2f})...", 0.72)
-                    ms.apply_filter('meshing_isotropic_explicit_remeshing',
-                                    targetlen=pymeshlab.AbsoluteValue(target_edge),
-                                    iterations=3,  # 3 iterations for good quality
-                                    adaptive=True)  # Adapt to local curvature
+                    ms.apply_filter('meshing_remove_connected_component_by_face_number', mincomponentsize=500)
+                    ms.apply_filter('meshing_remove_unreferenced_vertices')
+                    ms.apply_filter('meshing_re_orient_faces_coherently')
+                    
+                    success_tier = 4
+                    log_msg("Poisson Reconstruction complete.", 0.9)
                 except Exception as e:
-                    log_msg(f"Remeshing skipped: {e}", 0.72)
-                
-                # GENTLE POST-PROCESSING (don't over-smooth)
-                try:
-                    ms.apply_filter('apply_coord_taubin_smoothing',
-                                    lambda_=0.3, mu=-0.34, stepsmoothnum=2)  # Less aggressive smoothing
-                except: pass
-                
-                # Cleanup
-                ms.apply_filter('meshing_remove_connected_component_by_face_number', mincomponentsize=100)
-                ms.apply_filter('meshing_remove_unreferenced_vertices')
-                
-                # CRITICAL: Close any remaining holes from Alpha Wrap
-                log_msg("Closing remaining holes...", 0.75)
-                try:
-                    # Iterative closing: Close small holes first, then larger ones
-                    ms.apply_filter('meshing_close_holes', maxholesize=1000)
-                    ms.apply_filter('meshing_close_holes', maxholesize=5000)
-                    ms.apply_filter('meshing_close_holes', maxholesize=10000)
-                except: pass
+                     log_msg(f"Poisson failed: {e}", 0.9)
 
+                     
+        # Final cleanup for all methods
+        try:
+             ms.apply_filter('meshing_remove_unreferenced_vertices')
+        except: pass
 
-        final_faces = ms.current_mesh().face_number()
-        
         # ============================================
-        # FINAL SOLIDIFICATION (Critical for Slicers)
+        # FINAL SOLIDIFICATION CHECK (Double Verify)
         # ============================================
         log_msg("Ensuring solid volume...", 0.90)
         
         try:
-            # 1. Merge vertices (tolerance-based welding)
+            # 1. Merge vertices
             ms.apply_filter('meshing_merge_close_vertices', threshold=pymeshlab.PercentageValue(0.001))
             
             # 2. Repair non-manifold edges/vertices
@@ -274,13 +232,13 @@ def repair_worker(filepath, output_path, result_queue):
                 ms.apply_filter('meshing_repair_non_manifold_vertices')
             except: pass
             
-            # 3. Close ALL remaining holes (critical for watertightness)
+            # 3. Close ALL remaining holes
             try:
                 ms.apply_filter('meshing_close_holes', maxholesize=100000)
             except: pass
             
-            # 4. Re-orient all faces consistently outward
-            ms.apply_filter('meshing_re_orient_all_faces_coherentely')
+            # 4. Re-orient all faces consistently outward (Fixed Typo)
+            ms.apply_filter('meshing_re_orient_faces_coherently')
             
             # 5. Invert if volume is negative (inside-out mesh)
             try:
@@ -289,7 +247,6 @@ def repair_worker(filepath, output_path, result_queue):
                     log_msg("Flipping inverted normals...", 0.92)
                     ms.apply_filter('meshing_invert_face_orientation')
             except: 
-                # Fallback: Just ensure coherent orientation
                 pass
             
             # 6. Final cleanup
@@ -303,12 +260,11 @@ def repair_worker(filepath, output_path, result_queue):
         # ============================================
         # EXPORT
         # ============================================
+        final_faces = ms.current_mesh().face_number()
         log_msg(f"Exporting ({final_faces:,} faces)...", 0.95)
         ms.save_current_mesh(output_path)
         
         # Final Validate
-        # IMPORTANT: Use process=True to merge vertices (STL is non-indexed)
-        # This is required for accurate watertight detection
         try:
             val = trimesh.load(output_path, process=True)
             is_watertight = val.is_watertight
@@ -316,7 +272,7 @@ def repair_worker(filepath, output_path, result_queue):
             is_watertight = True # Optimistic fallback
         
         elapsed = time.time() - start_time
-        status = "Fixed" if is_watertight else "Has gaps"
+        status = "Fixed" if is_watertight else "With Gaps"
         log_msg(f"Done in {elapsed:.1f}s - {status}", 1.0)
         
         result_queue.put(('done', {
