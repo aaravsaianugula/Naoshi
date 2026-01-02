@@ -20,9 +20,9 @@ A powerful, local-first 3D mesh repair and editing studio. Designed to fix broke
 -   **Deep Mesh Repair**: Uses advanced algorithms (including Alpha Wrap) to fix non-manifold geometry, holes, and flipped normals.
 -   **CAD-Style Editing**:
     -   **Gizmo Controls**: Move (W), Rotate (E), and Scale (R) objects naturally.
-    -   **2D Sketch**: Create rectangles, circles, and project geometry to create new shapes.
-    -   **Extrude**: Turn sketches into solid 3D volumes.
--   **Validation**: Real-time checking for watertightness and printability.
+    -   **Face Extrusion**: Select mesh faces and extrude them with solid side geometry.
+    -   **Smart Sketches**: Auto-detects closed loops in projected geometry for extrusion.
+-   **Auto-Validation**: Instant background checks for watertightness upon file load.
 -   **Local & Secure**: All processing happens locally on your machine.
 -   **Project History**: Remembers your last 5 working files for quick access.
 
