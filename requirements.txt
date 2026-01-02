@@ -1,0 +1,9 @@
+customtkinter
+tkinterdnd2
+trimesh
+pymeshlab
+numpy
+fastapi
+uvicorn
+python-multipart
+websockets

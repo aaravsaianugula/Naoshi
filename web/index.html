@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mesher - Precision Repair</title>
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+
+  <!-- GSAP (Global) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <!-- Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+  <div id="app">
+    <!-- Hidden Input -->
+    <input type="file" id="file-input" accept=".stl,.obj" style="display:none;">
+
+    <!-- Background -->
+    <div class="bg-grid"></div>
+
+    <!-- 3D Container -->
+    <div id="viewer-container" style="position:fixed; inset:0; z-index:1;"></div>
+
+    <!-- Header (Floating) -->
+    <header class="header-glass">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <span>Mesher</span>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center;">
+        <div id="status-indicator" class="hidden"
+          style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500;">
+          <div style="width:8px; height:8px; background:var(--color-success); border-radius:50%;"></div>
+          <span id="status-text">Ready</span>
+        </div>
+        <button class="icon-btn" id="btn-settings" title="Settings" style="width:32px; height:32px;"><i
+            class="ph ph-gear"></i></button>
+      </div>
+    </header>
+
+    <!-- Center Stage (Drop Zone) -->
+    <div id="center-stage" class="center-stage">
+      <div style="text-align:center;">
+        <div class="hero-title">Mesher</div>
+        <div class="hero-sub">Intelligent Mesh Optimization</div>
+      </div>
+
+      <div class="drop-card" id="drop-zone">
+        <i class="ph ph-cube drop-icon"></i>
+        <div style="font-weight:600; font-size:18px; color:var(--color-text-primary);">Upload Model</div>
+        <div style="font-size:14px; color:var(--color-text-tertiary); margin-top:4px;">Drag & Drop STL / OBJ</div>
+      </div>
+    </div>
+
+    <!-- Sidebar Left: Info -->
+    <aside class="sidebar sidebar-left hidden" id="sidebar-left">
+      <div class="panel">
+        <div class="panel-title">Model Data</div>
+        <div class="info-row">
+          <span>Filename</span>
+          <span class="info-val" id="info-filename">--</span>
+        </div>
+        <div class="info-row">
+          <span>Vertices</span>
+          <span class="info-val" id="info-vertices">0</span>
+        </div>
+        <div class="info-row">
+          <span>Faces</span>
+          <span class="info-val" id="info-faces">0</span>
+        </div>
+      </div>
+
+      <!-- Recent Models Panel -->
+      <div class="panel" id="recent-models-panel" style="display: none;">
+        <div class="panel-title">Recent Models</div>
+        <div id="recent-models-list" class="recent-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Analysis</div>
+        <div class="info-row">
+          <span>Status</span>
+          <span class="info-val" id="info-waterproof" style="color:var(--color-warning);">Pending</span>
+        </div>
+      </div>
+
+      <!-- 3. Transform Panel -->
+      <div class="panel">
+        <div class="panel-title">Transform</div>
+
+        <div class="segmented-control" style="margin-bottom: 8px;">
+          <button class="segmented-btn active" id="mode-translate" title="Translate (W)">
+            <i class="ph ph-arrows-out-cardinal"></i>
+          </button>
+          <button class="segmented-btn" id="mode-rotate" title="Rotate (E)">
+            <i class="ph ph-arrows-clockwise"></i>
+          </button>
+          <button class="segmented-btn" id="mode-scale" title="Scale (R)">
+            <i class="ph ph-corners-out"></i>
+          </button>
+        </div>
+
+        <button class="btn-secondary" id="btn-reset-transform" style="width: 100%;">
+          <i class="ph ph-arrow-counter-clockwise"></i> Reset
+        </button>
+      </div>
+
+      <!-- 4. Create Shapes Panel -->
+      <div class="panel">
+        <div class="panel-title">Create Shapes</div>
+
+        <div class="shape-grid">
+          <button class="shape-btn" id="btn-add-cube" title="Add Cube">
+            <i class="ph ph-cube"></i>
+            <span>Cube</span>
+          </button>
+          <button class="shape-btn" id="btn-add-cylinder" title="Add Cylinder">
+            <i class="ph ph-cylinder"></i>
+            <span>Cylinder</span>
+          </button>
+          <button class="shape-btn" id="btn-add-sphere" title="Add Sphere">
+            <i class="ph ph-globe"></i>
+            <span>Sphere</span>
+          </button>
+          <button class="shape-btn" id="btn-add-cone" title="Add Cone">
+            <i class="ph ph-triangle"></i>
+            <span>Cone</span>
+          </button>
+        </div>
+
+        <!-- 2D Sketch Tools -->
+        <div style="border-top: 1px solid var(--border-subtle); margin-top: 12px; padding-top: 12px;">
+          <div class="panel-title" style="font-size: 11px; margin-bottom: 8px;">2D Sketch</div>
+          <div class="shape-grid">
+            <button class="shape-btn" id="btn-sketch-rect" title="Draw Rectangle">
+              <i class="ph ph-rectangle"></i>
+              <span>Rect</span>
+            </button>
+            <button class="shape-btn" id="btn-sketch-circle" title="Draw Circle">
+              <i class="ph ph-circle"></i>
+              <span>Circle</span>
+            </button>
+            <button class="shape-btn" id="btn-sketch-tri" title="Draw Triangle">
+              <i class="ph ph-triangle"></i>
+              <span>Tri</span>
+            </button>
+            <button class="shape-btn" id="btn-sketch-line" title="Draw Line">
+              <i class="ph ph-line-segment"></i>
+              <span>Line</span>
+            </button>
+          </div>
+          <button class="btn-secondary" id="btn-project-geometry" style="margin-top: 8px; width: 100%;">
+            <i class="ph ph-crosshair"></i> Project Geometry
+          </button>
+          <button class="btn-primary" id="btn-extrude-sketch" style="margin-top: 8px; width: 100%; height: 36px;">
+            <i class="ph ph-arrow-fat-up"></i> Extrude
+          </button>
+        </div>
+
+        <div style="border-top: 1px solid var(--border-subtle); margin-top: 12px; padding-top: 12px;">
+          <button class="btn-secondary" id="btn-join-meshes">
+            <i class="ph ph-unite"></i> Join Meshes
+          </button>
+          <button class="btn-secondary" id="btn-validate-mesh" style="margin-top: 4px;">
+            <i class="ph ph-check-circle"></i> Validate Solid
+          </button>
+          <button class="btn-danger" id="btn-clear-all" style="margin-top: 8px; width: 100%;">
+            <i class="ph ph-trash"></i> Clear All
+          </button>
+        </div>
+
+        <div id="validation-status" class="validation-badge" style="display: none;">
+          <span id="validation-icon"></span>
+          <span id="validation-text">Checking...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Sidebar Right: Actions (The Menu) -->
+    <aside class="sidebar sidebar-right hidden" id="sidebar-right">
+      <!-- 1. Orientation Panel -->
+      <div class="panel">
+        <div class="panel-title">Orientation</div>
+        <div class="segmented-control">
+          <button class="segmented-btn active" id="btn-reset-view">
+            <!-- Reuse reset for "Front" or use Auto Logic -->
+            <!-- Wait, current JS uses btn-reset-view for Camera Reset. 
+                  The user wants Orientation Logic (Auto vs Pick).
+                  Let's map them correctly. -->
+            <i class="ph ph-house"></i> Reset
+          </button>
+          <button class="segmented-btn" id="btn-auto-orient">
+            <i class="ph ph-magic-wand"></i> Auto
+          </button>
+          <button class="segmented-btn" id="btn-pick-face">
+            <i class="ph ph-hand-pointing"></i> Pick
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Repair Panel -->
+      <div class="panel">
+        <div class="panel-title">Repair Pipeline</div>
+
+        <button id="btn-start-repair" class="btn-primary">
+          <i class="ph ph-wrench"></i> Start Repair
+        </button>
+
+        <!-- Progress Bar (Internal) -->
+        <div id="repair-progress-bar"
+          style="height:4px; background:var(--bg-surface-subtle); border-radius:2px; overflow:hidden; display:none; margin-top:8px;">
+          <div id="repair-progress-fill"
+            style="width:0%; height:100%; background:var(--color-success); transition:width 0.3s;"></div>
+        </div>
+
+        <button id="btn-download" class="btn-primary"
+          style="display:none; background:var(--bg-surface); color:var(--color-success); border:1px solid var(--color-success);">
+          <i class="ph ph-download-simple"></i> Download Fixed
+        </button>
+      </div>
+
+      <!-- 3. Logs Panel -->
+      <div class="panel" style="flex-grow:1; max-height:300px;">
+        <div class="panel-title">Activity Log</div>
+        <div id="repair-logs" class="log-terminal"></div>
+      </div>
+    </aside>
+
+    <!-- Bottom Toolbar (Viewport) -->
+    <div id="toolbar-bottom" class="viewport-bar hidden">
+      <button class="icon-btn" data-action="rotate" title="Pause/Resume Rotation"><i class="ph ph-pause"></i></button>
+      <div style="width:1px; height:24px; background:var(--border-subtle); margin:0 8px;"></div>
+      <button class="icon-btn" data-action="wireframe" title="Wireframe"><i class="ph ph-polygon"></i></button>
+      <button class="icon-btn" data-action="texture" title="Shading"><i class="ph ph-circle-half"></i></button>
+      <button class="icon-btn" data-action="grid" title="Grid"><i class="ph ph-grid-four"></i></button>
+      <button class="icon-btn" id="btn-fit-view" data-action="fit" title="Fit View"><i
+          class="ph ph-corners-out"></i></button>
+    </div>
+
+    <!-- Edit Toolbar (Right Side) -->
+    <div id="edit-toolbar" class="viewport-bar hidden" style="left: auto; right: 24px; gap: 8px;">
+      <button class="icon-btn" id="btn-select-face" title="Select Faces">
+        <i class="ph ph-cursor"></i>
+      </button>
+      <button class="icon-btn" id="btn-thicken" title="Thicken Selected">
+        <i class="ph ph-arrows-out"></i>
+      </button>
+      <div style="width:1px; height:24px; background:var(--border-subtle); margin:0 4px;"></div>
+      <button class="icon-btn" id="btn-clear-sel" title="Clear Selection">
+        <i class="ph ph-x"></i>
+      </button>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"
+      style="position:fixed; bottom:100px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; pointer-events:none; z-index:1000;">
+    </div>
+
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+
+</html>

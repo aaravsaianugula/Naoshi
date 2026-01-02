@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mesher - Zen Repair</title>
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap"
+    rel="stylesheet">
+
+  <script type="module" crossorigin src="/assets/index-B93s2hK4.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BCw5E7TF.css">
+</head>
+
+<body>
+  <div id="app">
+    <!-- Hidden Input -->
+    <input type="file" id="file-input" accept=".stl,.obj" style="display:none;">
+
+    <!-- Visual Background Layer -->
+    <div class="bg-grid"></div>
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+
+    <!-- Layer 1: 3D Scene -->
+    <div id="viewer-container"></div>
+
+    <!-- Layer 2: UI Overlays -->
+
+    <!-- 1. Top Navigation Bar -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <span>Mesher</span>
+      </div>
+      <div class="header-controls">
+        <span class="status-pill success hidden" id="status-indicator">
+          <span class="mono" id="status-text">Ready</span>
+        </span>
+        <button class="icon-btn" title="Settings"><i class="ph ph-gear"></i></button>
+      </div>
+    </header>
+
+    <!-- 2. Left Sidebar (Info) - Initially Hidden -->
+    <aside class="sidebar sidebar-left glass-panel hidden" id="sidebar-left">
+      <div class="section-title">Model Info</div>
+      <div class="info-row">
+        <span class="info-label">Filename</span>
+        <span class="mono" id="info-filename">--</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Vertices</span>
+        <span class="mono" id="info-vertices">0</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Triangles</span>
+        <span class="mono" id="info-faces">0</span>
+      </div>
+
+      <div style="margin-top:24px;"></div>
+      <div class="section-title">Analysis</div>
+      <div class="info-row">
+        <span class="info-label">Waterproof</span>
+        <span class="mono" id="info-waterproof">Pending scan</span>
+      </div>
+    </aside>
+
+    <!-- 3. Right Sidebar (Tools) - Initially Hidden -->
+    <aside class="sidebar sidebar-right glass-panel hidden" id="sidebar-right">
+      <div class="section-title">Orientation</div>
+      <div class="action-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px;">
+        <button class="viewport-btn" id="btn-auto-orient" style="width:100%; border-radius:12px; gap:8px;">
+          <i class="ph ph-magic-wand"></i> Auto
+        </button>
+        <button class="viewport-btn" id="btn-pick-face" style="width:100%; border-radius:12px; gap:8px;">
+          <i class="ph ph-hand-pointing"></i> Pick
+        </button>
+      </div>
+
+      <div class="section-title">Repair</div>
+      <button class="btn-primary-large" id="btn-start-repair"
+        style="width:100%; background:var(--color-success); color:white; border:none; padding:12px; border-radius:12px; font-weight:600; cursor:pointer;">
+        Start Repair
+      </button>
+      <div id="repair-progress-bar"
+        style="height:4px; background:#eee; margin-top:12px; border-radius:2px; overflow:hidden; display:none;">
+        <div id="repair-progress-fill"
+          style="width:0%; height:100%; background:var(--color-success); transition:width 0.3s;"></div>
+      </div>
+
+      <!-- Live Logs -->
+      <div id="repair-logs" class="log-stream"></div>
+    </aside>
+
+    <!-- 4. Center Stage (Upload) -->
+    <!-- 4. Center Stage (Hero Homepage) -->
+    <div id="center-stage" class="center-stage">
+
+      <!-- Hero Content -->
+      <div class="hero-content">
+        <div class="hero-brand">
+          <div class="hero-logo"></div>
+          <h1 class="hero-title">Mesher</h1>
+        </div>
+        <p class="hero-subtitle">
+          Intelligent 3D Mesh Repair & Optimization
+        </p>
+        <p class="hero-desc">
+          Fix non-manifolds, close holes, and optimize topology in seconds.
+          The ultimate tool for 3D printing preparation.
+        </p>
+
+        <div class="feature-pills">
+          <span class="pill"><i class="ph ph-magic-wand"></i> Auto-Repair</span>
+          <span class="pill"><i class="ph ph-cube"></i> Voxel Remesh</span>
+          <span class="pill"><i class="ph ph-arrows-out-cardinal"></i> Auto-Orient</span>
+        </div>
+      </div>
+
+      <!-- Action Card -->
+      <div class="glass-panel drop-zone" id="drop-zone">
+        <div class="drop-icon"><i class="ph ph-cloud-arrow-up"></i></div>
+        <div class="drop-text-primary">Drop 3D Model</div>
+        <div class="drop-text-secondary">.stl, .obj, .glb</div>
+      </div>
+    </div>
+
+    <!-- 5. Viewport Controls (Overlay) -->
+    <div class="viewport-controls hidden" id="viewport-controls">
+      <button class="viewport-btn" id="btn-reset-view" title="Reset View"><i class="ph ph-house"></i></button>
+      <button class="viewport-btn" id="btn-fit-view" title="Fit to Screen"><i class="ph ph-corners-out"></i></button>
+    </div>
+
+    <!-- 6. Bottom Toolbar -->
+    <div class="toolbar-bottom hidden" id="toolbar-bottom">
+      <button class="icon-btn" data-action="wireframe" title="Wireframe"><i class="ph ph-polygon"></i></button>
+      <button class="icon-btn" data-action="texture" title="Texture"><i class="ph ph-paint-brush"></i></button>
+      <div class="toolbar-divider"></div>
+      <button class="icon-btn" data-action="grid" title="Grid"><i class="ph ph-grid-four"></i></button>
+      <button class="icon-btn" data-action="measure" title="Measure"><i class="ph ph-ruler"></i></button>
+
+      <div class="toolbar-divider"></div>
+      <button class="icon-btn" id="btn-download" title="Download Result"
+        style="color:var(--color-success); display:none;"><i class="ph ph-download-simple"></i></button>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span>&copy; 2026 Mesher Inc.</span>
+        <span class="divider">/</span>
+        <a href="#">Privacy</a>
+        <span class="divider">/</span>
+        <a href="#">Terms</a>
+      </div>
+      <div class="footer-right">
+        <span class="status-badge"><span class="dot"></span> Systems Normal</span>
+        <span class="version">v2.4.0-beta</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</body>
+
+</html>

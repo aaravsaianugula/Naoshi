@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+temp_uploads/
+fixed_meshes/
+.DS_Store
+.vscode/
