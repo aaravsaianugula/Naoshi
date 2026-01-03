@@ -2,6 +2,9 @@
 title Naoshi - Precision STL Repair
 color 0f
 
+REM Change to the script's directory (needed when launched from Start Menu/Search)
+cd /d "%~dp0"
+
 echo ==========================================
 echo      Naoshi - Precision STL Repair
 echo ==========================================
