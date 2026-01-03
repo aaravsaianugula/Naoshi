@@ -6,10 +6,15 @@ Write-Host "       Mesher App Installer" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Setup Install Directory
+# 1. Setup Install Directory & Clean Old Versions
 $InstallDir = "$env:LOCALAPPDATA\Mesher"
-Write-Host "[1/5] Preparing Install Directory:" -NoNewline
-Write-Host " $InstallDir" -ForegroundColor Yellow
+$ShortcutPath = "$env:USERPROFILE\Desktop\Mesher.lnk"
+
+Write-Host "[1/5] Preparing Install Directory..."
+if (Test-Path $ShortcutPath) {
+    Write-Host "      Removing old shortcut..." -ForegroundColor Gray
+    Remove-Item -Path $ShortcutPath -Force
+}
 
 if (Test-Path $InstallDir) {
     Write-Host "      Cleaning old installation..." -ForegroundColor Gray
@@ -25,7 +30,8 @@ $ZipFile = "$InstallDir\source.zip"
 
 try {
     Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipFile
-} catch {
+}
+catch {
     Write-Host "Error downloading file. Please check your internet connection." -ForegroundColor Red
     exit 1
 }
