@@ -67,13 +67,14 @@ Write-Host "      Installing Python dependencies (this may take a minute)..."
 
 # Install Node.js dependencies for web frontend
 Write-Host "      Installing Node.js dependencies..."
-if (-not (Get-Command "npm" -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command "npm.cmd" -ErrorAction SilentlyContinue)) {
     Write-Host "Warning: npm not found. Web dependencies will not be installed." -ForegroundColor Yellow
     Write-Host "         Install Node.js from https://nodejs.org for full functionality." -ForegroundColor Yellow
 }
 else {
     Set-Location "$InstallDir\web"
-    npm install --quiet 2>$null
+    # Use npm.cmd directly to avoid PowerShell execution policy issues with npm.ps1
+    npm.cmd install --quiet 2>$null
     Set-Location $InstallDir
 }
 
