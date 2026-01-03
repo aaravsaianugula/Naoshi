@@ -1,8 +1,30 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Node.js
+node_modules/
+web/node_modules/
+
+# Build outputs
+web/dist/
+
+# Temporary files
 temp_uploads/
 fixed_meshes/
-.DS_Store
-node_modules/
+*.log
+
+# IDE / Editors
 .vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

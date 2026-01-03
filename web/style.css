@@ -1,4 +1,4 @@
-/* --- Mesher Design System 3.0 (Precision) --- */
+/* --- Naoshi Design System 3.0 (Precision) --- */
 
 :root {
   /* --- Palette (Zinc-based) --- */
@@ -519,6 +519,8 @@ body {
   font-size: 16px;
 }
 
+/* Background Grid - Removed fixed background logic, handled by canvas now */
+
 /* 3. Center Stage (Drop Zone) */
 .center-stage {
   position: absolute;
@@ -528,68 +530,94 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 20;
-  transition: opacity 0.5s var(--ease-default), transform 0.5s var(--ease-default);
+  transition: opacity 0.8s var(--ease-default), transform 0.8s var(--ease-default);
   pointer-events: auto;
-  /* Fix: Ensure it captures clicks when visible */
 }
 
 .center-stage.hidden {
   opacity: 0;
-  transform: scale(0.95);
+  transform: translateY(-20px) scale(0.98);
   pointer-events: none;
 }
 
 .hero-title {
-  font-size: 48px;
+  font-family: 'Inter', sans-serif;
+  font-size: 80px;
   font-weight: 800;
-  letter-spacing: -0.03em;
-  margin-bottom: 8px;
-  background: linear-gradient(180deg, #18181B 0%, #52525B 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  margin-bottom: 16px;
+  color: #111;
+  /* Radical Gradient will be handled by blending with bg or mix-blend-mode */
+  mix-blend-mode: color-burn;
+  /* Radical interaction with fluid bg */
+  opacity: 0;
+  /* Animate in */
+  transform: translateY(30px);
 }
 
 .hero-sub {
+  font-family: 'JetBrains Mono', monospace;
   color: var(--color-text-secondary);
-  font-size: 16px;
-  margin-bottom: 48px;
+  font-size: 14px;
+  margin-bottom: 64px;
+  opacity: 0;
+  /* Animate in */
+  transform: translateY(20px);
+  background: white;
+  padding: 4px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border-subtle);
 }
 
-/* Drop Zone Card */
+/* Drop Zone Card - Radical Minimalist */
 .drop-card {
   width: 100%;
-  max-width: 480px;
-  height: 240px;
-  background: white;
-  border: 1px dashed var(--color-text-tertiary);
-  border-radius: var(--radius-lg);
+  max-width: 420px;
+  height: 220px;
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   pointer-events: auto;
-  /* Fix for clicking */
-  transition: all 0.3s var(--ease-default);
-  box-shadow: var(--shadow-sm);
+  transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  opacity: 0;
 }
 
 .drop-card:hover {
+  transform: scale(1.02) translateY(-4px);
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.05),
+    0 10px 10px -5px rgba(0, 0, 0, 0.02),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
   border-color: var(--color-accent);
-  background: #F8FAFC;
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
 }
 
 .drop-icon {
-  font-size: 48px;
-  color: var(--color-text-tertiary);
-  margin-bottom: 16px;
-  transition: color 0.3s;
+  font-size: 32px;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
+  transition: all 0.4s var(--ease-default);
+  background: white;
+  padding: 16px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
 }
 
 .drop-card:hover .drop-icon {
+  transform: scale(1.1) rotate(10deg);
   color: var(--color-accent);
+  box-shadow: var(--shadow-md);
 }
 
 /* 4. Logs / Terminal */
@@ -700,4 +728,116 @@ body {
 
 .text-warning {
   color: var(--color-warning);
+}
+
+/* --- REPAIR FOCUS MODE --- */
+body {
+  transition: background-color 1.5s ease-in-out;
+  background-color: var(--bg-app);
+  /* Default */
+}
+
+body.repair-active {
+  /* ANIME SKY GRADIENT (CSS) */
+  /* Safe, performant, and guaranteed to work */
+  background: linear-gradient(135deg,
+      #a1c4fd 0%,
+      #c2e9fb 50%,
+      #fbc2eb 100%) !important;
+  background-size: 200% 200%;
+  animation: bgPan 15s ease infinite;
+}
+
+@keyframes bgPan {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Hide Left Sidebar completely */
+body.repair-active .sidebar-left {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-20px);
+}
+
+/* Hide Orientation Card in Right Sidebar */
+/* We target the FIRST panel in the right sidebar, which is Orientation */
+body.repair-active .sidebar-right .panel:first-child {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+}
+
+/* FLASH ANIMATION OVERLAY */
+#flash-overlay {
+  position: fixed;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 0.1s ease-out;
+}
+
+body.flash-active #flash-overlay {
+  opacity: 1;
+  transition: none;
+  /* Instant on */
+}
+
+/* === ANIME SUBTITLE OVERLAY === */
+#anime-subtitle {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 1.2rem;
+  color: #ffffff;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(64, 188, 255, 0.3);
+  letter-spacing: 0.15em;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1000;
+  transition: opacity 0.5s ease;
+  text-align: center;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.1) 100%);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+body.repair-active #anime-subtitle {
+  opacity: 1;
+  animation: subtitlePulse 3s ease-in-out infinite;
+}
+
+@keyframes subtitlePulse {
+
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: translateX(-50%) scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.02);
+  }
 }
