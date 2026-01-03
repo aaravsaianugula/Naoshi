@@ -1285,163 +1285,168 @@ class ZenMesher {
     }
 
     async handleFile(file) {
-        if (!file.name.toLowerCase().endsWith('.stl') && !file.name.toLowerCase().endsWith('.obj')) {
-            this.showToast("Only .stl or .obj files supported");
-            return;
-        }
-
-        this.activeFile = file;
-        this.ui.infoFilename.textContent = file.name;
-        this.ui.infoVertices.textContent = "Loading...";
-
-        this.setState('orientation');
-
-        // Upload
-        this.uploadPromise = this.uploadFile(file);
-
-        // Preview
-        const url = URL.createObjectURL(file);
-        this.viewer.loadSTL(url, () => {
-            const stats = this.viewer.getStats();
-            if (stats) {
-                this.ui.infoVertices.textContent = stats.vertices.toLocaleString();
-                this.ui.infoFaces.textContent = stats.faces.toLocaleString();
+        console.log("handleFile started for:", file.name);
+        try {
+            if (!file.name.toLowerCase().endsWith('.stl') && !file.name.toLowerCase().endsWith('.obj')) {
+                this.showToast("Only .stl or .obj files supported");
+                return;
             }
-            // Trigger automatic validation
-            this.validateMesh();
-        });
-    }
+
+            this.activeFile = file;
+            if (this.ui.infoFilename) this.ui.infoFilename.textContent = file.name;
+            if (this.ui.infoVertices) this.ui.infoVertices.textContent = "Loading...";
+
+            console.log("Setting state to orientation...");
+            this.setState('orientation');
+
+            // ...
+
+            // Upload
+            this.uploadPromise = this.uploadFile(file);
+
+            // Preview
+            const url = URL.createObjectURL(file);
+            this.viewer.loadSTL(url, () => {
+                const stats = this.viewer.getStats();
+                if (stats) {
+                    this.ui.infoVertices.textContent = stats.vertices.toLocaleString();
+                    this.ui.infoFaces.textContent = stats.faces.toLocaleString();
+                }
+                // Trigger automatic validation
+                this.validateMesh();
+            });
+        }
 
     async uploadFile(file) {
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-            const upRes = await fetch('/api/upload', { method: 'POST', body: formData });
-            if (!upRes.ok) throw new Error("Server upload error");
-            const upData = await upRes.json();
-            this.serverId = upData.id;
-            return this.serverId;
-        } catch (e) {
-            console.error("Upload failed", e);
-            this.showToast("Upload failed");
-            throw e;
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const upRes = await fetch('/api/upload', { method: 'POST', body: formData });
+                if (!upRes.ok) throw new Error("Server upload error");
+                const upData = await upRes.json();
+                this.serverId = upData.id;
+                return this.serverId;
+            } catch (e) {
+                console.error("Upload failed", e);
+                this.showToast("Upload failed");
+                throw e;
+            }
         }
-    }
 
     async startRepair() {
-        this.setState('repairing');
-        try {
-            if (!this.serverId) await this.uploadPromise;
+            this.setState('repairing');
+            try {
+                if (!this.serverId) await this.uploadPromise;
 
-            const currentMatrix = this.viewer.getCurrentTransformArray();
-            const body = {};
-            if (currentMatrix) body.transform = currentMatrix;
+                const currentMatrix = this.viewer.getCurrentTransformArray();
+                const body = {};
+                if (currentMatrix) body.transform = currentMatrix;
 
-            await fetch(`/api/repair/${this.serverId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+                await fetch(`/api/repair/${this.serverId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
 
-            // WebSocket
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${window.location.host}/ws/progress/${this.serverId}`);
+                // WebSocket
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${protocol}//${window.location.host}/ws/progress/${this.serverId}`);
 
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.type === 'progress') {
-                    this.updateStatus(data.text, data.value * 100);
-                } else if (data.type === 'done') {
-                    this.updateStatus('Complete', 100);
-                    this.showToast("Repair Complete! Loading...");
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'progress') {
+                        this.updateStatus(data.text, data.value * 100);
+                    } else if (data.type === 'done') {
+                        this.updateStatus('Complete', 100);
+                        this.showToast("Repair Complete! Loading...");
 
-                    // Auto-load Results
-                    const resultUrl = `/api/download/${this.serverId}`;
-                    this.viewer.loadSTL(resultUrl, () => {
-                        this.showToast("Fixed Model Loaded");
-                        // Reset visuals
-                        if (this.viewer.updateRepairProgress) this.viewer.updateRepairProgress(0);
+                        // Auto-load Results
+                        const resultUrl = `/api/download/${this.serverId}`;
+                        this.viewer.loadSTL(resultUrl, () => {
+                            this.showToast("Fixed Model Loaded");
+                            // Reset visuals
+                            if (this.viewer.updateRepairProgress) this.viewer.updateRepairProgress(0);
 
-                        // Save to recent models cache
-                        const filename = this.currentFilename || `fixed_${this.serverId}.stl`;
-                        this.saveToRecentModels(filename, resultUrl);
-                    });
+                            // Save to recent models cache
+                            const filename = this.currentFilename || `fixed_${this.serverId}.stl`;
+                            this.saveToRecentModels(filename, resultUrl);
+                        });
 
-                    this.setState('success');
-                    ws.close();
-                    if (this.ui.infoWaterproof) {
-                        this.ui.infoWaterproof.textContent = "Yes";
-                        this.ui.infoWaterproof.style.color = "var(--color-success)";
+                        this.setState('success');
+                        ws.close();
+                        if (this.ui.infoWaterproof) {
+                            this.ui.infoWaterproof.textContent = "Yes";
+                            this.ui.infoWaterproof.style.color = "var(--color-success)";
+                        }
                     }
-                }
-            };
-        } catch (e) {
-            console.error(e);
-            this.showToast("Repair failed");
-            this.ui.btnStartRepair.disabled = false;
-            this.ui.btnStartRepair.textContent = "Retry";
+                };
+            } catch (e) {
+                console.error(e);
+                this.showToast("Repair failed");
+                this.ui.btnStartRepair.disabled = false;
+                this.ui.btnStartRepair.textContent = "Retry";
+            }
         }
-    }
 
-    // --- Recent Models ---
+        // --- Recent Models ---
 
-    loadRecentModels() {
-        try {
-            const stored = localStorage.getItem(this.RECENT_MODELS_KEY);
-            if (stored) {
-                this.recentModels = JSON.parse(stored);
-            } else {
+        loadRecentModels() {
+            try {
+                const stored = localStorage.getItem(this.RECENT_MODELS_KEY);
+                if (stored) {
+                    this.recentModels = JSON.parse(stored);
+                } else {
+                    this.recentModels = [];
+                }
+                this.renderRecentModels();
+            } catch (e) {
+                console.error("Failed to load recent models", e);
                 this.recentModels = [];
             }
+        }
+
+        saveToRecentModels(filename, url) {
+            // Remove if exists
+            this.recentModels = this.recentModels.filter(m => m.filename !== filename);
+
+            // Add to top
+            this.recentModels.unshift({
+                filename: filename,
+                url: url, // Note: Blob URLs expire. Ideally we'd store ID and re-fetch or use different storage.
+                // For this session/app lifecycle with API, we might need ID.
+                // Let's store API ID if possible, or assume URL is from API download.
+                date: new Date().toISOString()
+            });
+
+            // Limit to 5
+            if (this.recentModels.length > this.MAX_RECENT_MODELS) {
+                this.recentModels = this.recentModels.slice(0, this.MAX_RECENT_MODELS);
+            }
+
+            localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(this.recentModels));
             this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to load recent models", e);
-            this.recentModels = [];
-        }
-    }
-
-    saveToRecentModels(filename, url) {
-        // Remove if exists
-        this.recentModels = this.recentModels.filter(m => m.filename !== filename);
-
-        // Add to top
-        this.recentModels.unshift({
-            filename: filename,
-            url: url, // Note: Blob URLs expire. Ideally we'd store ID and re-fetch or use different storage.
-            // For this session/app lifecycle with API, we might need ID.
-            // Let's store API ID if possible, or assume URL is from API download.
-            date: new Date().toISOString()
-        });
-
-        // Limit to 5
-        if (this.recentModels.length > this.MAX_RECENT_MODELS) {
-            this.recentModels = this.recentModels.slice(0, this.MAX_RECENT_MODELS);
         }
 
-        localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(this.recentModels));
-        this.renderRecentModels();
-    }
+        renderRecentModels() {
+            const list = document.getElementById('recent-models-list');
+            const panel = document.getElementById('recent-models-panel');
 
-    renderRecentModels() {
-        const list = document.getElementById('recent-models-list');
-        const panel = document.getElementById('recent-models-panel');
+            if (!list || !panel) return;
 
-        if (!list || !panel) return;
+            if (this.recentModels.length === 0) {
+                panel.style.display = 'none';
+                return;
+            }
 
-        if (this.recentModels.length === 0) {
-            panel.style.display = 'none';
-            return;
-        }
+            panel.style.display = 'flex';
+            list.innerHTML = '';
 
-        panel.style.display = 'flex';
-        list.innerHTML = '';
+            this.recentModels.forEach((model, index) => {
+                const item = document.createElement('div');
+                item.className = 'recent-item';
+                item.onclick = () => this.handleRecentModelClick(model);
 
-        this.recentModels.forEach((model, index) => {
-            const item = document.createElement('div');
-            item.className = 'recent-item';
-            item.onclick = () => this.handleRecentModelClick(model);
-
-            item.innerHTML = `
+                item.innerHTML = `
                 <div style="overflow:hidden;">
                     <div class="name" title="${model.filename}">${model.filename}</div>
                     <div class="meta">${new Date(model.date).toLocaleTimeString()}</div>
@@ -1451,38 +1456,38 @@ class ZenMesher {
                 </button>
             `;
 
-            // Delete button
-            const btn = item.querySelector('.delete-btn');
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                this.deleteRecentModel(index);
-            };
+                // Delete button
+                const btn = item.querySelector('.delete-btn');
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteRecentModel(index);
+                };
 
-            list.appendChild(item);
-        });
-    }
+                list.appendChild(item);
+            });
+        }
 
-    deleteRecentModel(index) {
-        this.recentModels.splice(index, 1);
-        localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(this.recentModels));
-        this.renderRecentModels();
-    }
+        deleteRecentModel(index) {
+            this.recentModels.splice(index, 1);
+            localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(this.recentModels));
+            this.renderRecentModels();
+        }
 
-    handleRecentModelClick(model) {
-        // If it's an API URL (begins with /api/), we can load it.
-        // If it was a Blob URL, it might have expired if page reloaded.
-        // We'll try to load it.
-        this.viewer.loadSTL(model.url, () => {
-            this.showToast(`Loaded ${model.filename}`);
-            this.currentFilename = model.filename;
-            this.ui.infoFilename.textContent = model.filename;
-        });
-    }
+        handleRecentModelClick(model) {
+            // If it's an API URL (begins with /api/), we can load it.
+            // If it was a Blob URL, it might have expired if page reloaded.
+            // We'll try to load it.
+            this.viewer.loadSTL(model.url, () => {
+                this.showToast(`Loaded ${model.filename}`);
+                this.currentFilename = model.filename;
+                this.ui.infoFilename.textContent = model.filename;
+            });
+        }
 
-    showToast(msg) {
-        const t = document.createElement('div');
-        t.className = 'toast';
-        t.style.cssText = `
+        showToast(msg) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.style.cssText = `
             background: #27272A; 
             color: white; 
             padding: 8px 16px; 
@@ -1491,93 +1496,93 @@ class ZenMesher {
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             animation: slideIn 0.3s ease;
         `;
-        t.textContent = msg;
-        const container = document.getElementById('toast-container');
-        if (container) {
-            container.appendChild(t);
-            setTimeout(() => t.remove(), 3000);
+            t.textContent = msg;
+            const container = document.getElementById('toast-container');
+            if (container) {
+                container.appendChild(t);
+                setTimeout(() => t.remove(), 3000);
+            }
         }
-    }
 
-    loadRecentModels() {
-        try {
-            const stored = localStorage.getItem(this.RECENT_MODELS_KEY);
-            if (stored) {
-                this.recentModels = JSON.parse(stored);
-            } else {
+        loadRecentModels() {
+            try {
+                const stored = localStorage.getItem(this.RECENT_MODELS_KEY);
+                if (stored) {
+                    this.recentModels = JSON.parse(stored);
+                } else {
+                    this.recentModels = [];
+                }
+                this.renderRecentModels();
+            } catch (e) {
+                console.error("Failed to load recent models", e);
                 this.recentModels = [];
             }
-            this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to load recent models", e);
-            this.recentModels = [];
         }
-    }
 
-    saveToRecentModels(filename, filepath) {
-        try {
-            let models = JSON.parse(localStorage.getItem(this.RECENT_MODELS_KEY) || '[]');
+        saveToRecentModels(filename, filepath) {
+            try {
+                let models = JSON.parse(localStorage.getItem(this.RECENT_MODELS_KEY) || '[]');
 
-            // Remove if already exists (to move to top)
-            models = models.filter(m => m.filepath !== filepath);
+                // Remove if already exists (to move to top)
+                models = models.filter(m => m.filepath !== filepath);
 
-            // Add to front
-            models.unshift({
-                filename,
-                filepath,
-                timestamp: Date.now()
-            });
+                // Add to front
+                models.unshift({
+                    filename,
+                    filepath,
+                    timestamp: Date.now()
+                });
 
-            // Keep only last 5
-            if (models.length > this.MAX_RECENT_MODELS) {
-                models = models.slice(0, this.MAX_RECENT_MODELS);
+                // Keep only last 5
+                if (models.length > this.MAX_RECENT_MODELS) {
+                    models = models.slice(0, this.MAX_RECENT_MODELS);
+                }
+
+                localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(models));
+                this.recentModels = models;
+                this.renderRecentModels();
+            } catch (e) {
+                console.error("Failed to save recent model:", e);
+            }
+        }
+
+        removeFromRecentModels(filepath) {
+            try {
+                let models = JSON.parse(localStorage.getItem(this.RECENT_MODELS_KEY) || '[]');
+                models = models.filter(m => m.filepath !== filepath);
+                localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(models));
+                this.recentModels = models;
+                this.renderRecentModels();
+            } catch (e) {
+                console.error("Failed to remove recent model:", e);
+            }
+        }
+
+        renderRecentModels() {
+            const list = document.getElementById('recent-models-list');
+            const panel = document.getElementById('recent-models-panel');
+
+            if (!list || !panel) return;
+
+            if (this.recentModels.length === 0) {
+                panel.style.display = 'none';
+                return;
             }
 
-            localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(models));
-            this.recentModels = models;
-            this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to save recent model:", e);
-        }
-    }
+            panel.style.display = 'flex';
+            list.innerHTML = '';
 
-    removeFromRecentModels(filepath) {
-        try {
-            let models = JSON.parse(localStorage.getItem(this.RECENT_MODELS_KEY) || '[]');
-            models = models.filter(m => m.filepath !== filepath);
-            localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(models));
-            this.recentModels = models;
-            this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to remove recent model:", e);
-        }
-    }
+            this.recentModels.forEach((model, index) => {
+                const item = document.createElement('div');
+                item.className = 'recent-item';
 
-    renderRecentModels() {
-        const list = document.getElementById('recent-models-list');
-        const panel = document.getElementById('recent-models-panel');
+                // Handle click on item
+                item.onclick = (e) => {
+                    if (e.target.closest('.delete-btn')) return;
+                    this.handleRecentModelClick(model);
+                };
 
-        if (!list || !panel) return;
-
-        if (this.recentModels.length === 0) {
-            panel.style.display = 'none';
-            return;
-        }
-
-        panel.style.display = 'flex';
-        list.innerHTML = '';
-
-        this.recentModels.forEach((model, index) => {
-            const item = document.createElement('div');
-            item.className = 'recent-item';
-
-            // Handle click on item
-            item.onclick = (e) => {
-                if (e.target.closest('.delete-btn')) return;
-                this.handleRecentModelClick(model);
-            };
-
-            item.innerHTML = `
+                item.innerHTML = `
                 <div style="overflow:hidden;">
                     <div class="name" title="${model.filename}">${model.filename}</div>
                     <div class="meta">${new Date(model.timestamp).toLocaleTimeString()}</div>
@@ -1587,17 +1592,17 @@ class ZenMesher {
                 </button>
             `;
 
-            // Delete button
-            const btn = item.querySelector('.delete-btn');
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                this.removeFromRecentModels(model.filepath);
-            };
+                // Delete button
+                const btn = item.querySelector('.delete-btn');
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.removeFromRecentModels(model.filepath);
+                };
 
-            list.appendChild(item);
-        });
+                list.appendChild(item);
+            });
+        }
     }
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new ZenMesher();
