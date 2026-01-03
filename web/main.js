@@ -973,12 +973,20 @@ class ZenMesher {
     }
 
     setupEvents() {
+        console.log("Setting up events...");
         // Drop Zone Click
         if (this.ui.dropZone) {
-            this.ui.dropZone.addEventListener('click', () => this.ui.fileInput.click());
+            console.log("Dropzone found, attaching listener");
+            this.ui.dropZone.addEventListener('click', () => {
+                console.log("Dropzone clicked, triggering file input");
+                this.ui.fileInput.click();
+            });
+        } else {
+            console.error("Dropzone NOT found");
         }
 
         this.ui.fileInput.addEventListener('change', (e) => {
+            console.log("File input changed", e.target.files);
             if (e.target.files.length) this.handleFile(e.target.files[0]);
         });
 

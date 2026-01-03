@@ -529,6 +529,8 @@ body {
   justify-content: center;
   z-index: 20;
   transition: opacity 0.5s var(--ease-default), transform 0.5s var(--ease-default);
+  pointer-events: auto;
+  /* Fix: Ensure it captures clicks when visible */
 }
 
 .center-stage.hidden {
