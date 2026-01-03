@@ -201,6 +201,9 @@ export class ModelViewer {
                     // Better to clean up previous listeners if possible, but bind returns new fn.
                     // For now, it's okay for this session.
 
+                    // VISIBILITY FIX: Ensure model fades in
+                    this.targetProgress = 1.0;
+
                     console.log("Model setup complete, calling callback.");
                     if (onLoadCallback) onLoadCallback();
 
