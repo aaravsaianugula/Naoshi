@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import { ModelViewer } from './viewer.js';
-import { MeshEditor } from './mesh-editor.js';
+import { ModelViewer } from './viewer.js?v=4';
+import { MeshEditor } from './mesh-editor.js?v=4';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+
+// Debug Alert (Removed)
 
 class ZenMesher {
     constructor() {
@@ -973,14 +975,20 @@ class ZenMesher {
     }
 
     setupEvents() {
-        // Drop Zone Click
-        if (this.ui.dropZone) {
-            this.ui.dropZone.addEventListener('click', () => this.ui.fileInput.click());
-        }
+        // Drop Zone Click handled by native input overlay
+        console.log("Setup Events: Using native input overlay");
 
-        this.ui.fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) this.handleFile(e.target.files[0]);
-        });
+        if (this.ui.fileInput) {
+            this.ui.fileInput.addEventListener('change', (e) => {
+                console.log("File input changed", e.target.files);
+                if (e.target.files.length) {
+                    // Alert to user to verify interception (Debug)
+                    // alert("File detected: " + e.target.files[0].name); 
+                    this.handleFile(e.target.files[0]);
+                }
+                e.target.value = '';
+            });
+        }
 
         // Global Drag & Drop logic
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
@@ -1282,31 +1290,40 @@ class ZenMesher {
     }
 
     async handleFile(file) {
-        if (!file.name.toLowerCase().endsWith('.stl') && !file.name.toLowerCase().endsWith('.obj')) {
-            this.showToast("Only .stl or .obj files supported");
-            return;
-        }
-
-        this.activeFile = file;
-        this.ui.infoFilename.textContent = file.name;
-        this.ui.infoVertices.textContent = "Loading...";
-
-        this.setState('orientation');
-
-        // Upload
-        this.uploadPromise = this.uploadFile(file);
-
-        // Preview
-        const url = URL.createObjectURL(file);
-        this.viewer.loadSTL(url, () => {
-            const stats = this.viewer.getStats();
-            if (stats) {
-                this.ui.infoVertices.textContent = stats.vertices.toLocaleString();
-                this.ui.infoFaces.textContent = stats.faces.toLocaleString();
+        console.log("handleFile started for:", file.name);
+        try {
+            if (!file.name.toLowerCase().endsWith('.stl') && !file.name.toLowerCase().endsWith('.obj')) {
+                this.showToast("Only .stl or .obj files supported");
+                return;
             }
-            // Trigger automatic validation
-            this.validateMesh();
-        });
+
+            this.activeFile = file;
+            if (this.ui.infoFilename) this.ui.infoFilename.textContent = file.name;
+            if (this.ui.infoVertices) this.ui.infoVertices.textContent = "Loading...";
+
+            console.log("Setting state to orientation...");
+            this.setState('orientation');
+
+            // ...
+
+            // Upload
+            this.uploadPromise = this.uploadFile(file);
+
+            // Preview
+            const url = URL.createObjectURL(file);
+            this.viewer.loadSTL(url, () => {
+                const stats = this.viewer.getStats();
+                if (stats) {
+                    this.ui.infoVertices.textContent = stats.vertices.toLocaleString();
+                    this.ui.infoFaces.textContent = stats.faces.toLocaleString();
+                }
+                // Trigger automatic validation
+                this.validateMesh();
+            });
+        } catch (e) {
+            console.error("Error in handleFile:", e);
+            alert("Error loading file: " + e.message);
+        }
     }
 
     async uploadFile(file) {
@@ -1496,105 +1513,7 @@ class ZenMesher {
         }
     }
 
-    loadRecentModels() {
-        try {
-            const stored = localStorage.getItem(this.RECENT_MODELS_KEY);
-            if (stored) {
-                this.recentModels = JSON.parse(stored);
-            } else {
-                this.recentModels = [];
-            }
-            this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to load recent models", e);
-            this.recentModels = [];
-        }
-    }
-
-    saveToRecentModels(filename, filepath) {
-        try {
-            let models = JSON.parse(localStorage.getItem(this.RECENT_MODELS_KEY) || '[]');
-
-            // Remove if already exists (to move to top)
-            models = models.filter(m => m.filepath !== filepath);
-
-            // Add to front
-            models.unshift({
-                filename,
-                filepath,
-                timestamp: Date.now()
-            });
-
-            // Keep only last 5
-            if (models.length > this.MAX_RECENT_MODELS) {
-                models = models.slice(0, this.MAX_RECENT_MODELS);
-            }
-
-            localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(models));
-            this.recentModels = models;
-            this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to save recent model:", e);
-        }
-    }
-
-    removeFromRecentModels(filepath) {
-        try {
-            let models = JSON.parse(localStorage.getItem(this.RECENT_MODELS_KEY) || '[]');
-            models = models.filter(m => m.filepath !== filepath);
-            localStorage.setItem(this.RECENT_MODELS_KEY, JSON.stringify(models));
-            this.recentModels = models;
-            this.renderRecentModels();
-        } catch (e) {
-            console.error("Failed to remove recent model:", e);
-        }
-    }
-
-    renderRecentModels() {
-        const list = document.getElementById('recent-models-list');
-        const panel = document.getElementById('recent-models-panel');
-
-        if (!list || !panel) return;
-
-        if (this.recentModels.length === 0) {
-            panel.style.display = 'none';
-            return;
-        }
-
-        panel.style.display = 'flex';
-        list.innerHTML = '';
-
-        this.recentModels.forEach((model, index) => {
-            const item = document.createElement('div');
-            item.className = 'recent-item';
-
-            // Handle click on item
-            item.onclick = (e) => {
-                if (e.target.closest('.delete-btn')) return;
-                this.handleRecentModelClick(model);
-            };
-
-            item.innerHTML = `
-                <div style="overflow:hidden;">
-                    <div class="name" title="${model.filename}">${model.filename}</div>
-                    <div class="meta">${new Date(model.timestamp).toLocaleTimeString()}</div>
-                </div>
-                <button class="delete-btn" title="Remove">
-                    <i class="ph ph-trash"></i>
-                </button>
-            `;
-
-            // Delete button
-            const btn = item.querySelector('.delete-btn');
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                this.removeFromRecentModels(model.filepath);
-            };
-
-            list.appendChild(item);
-        });
-    }
-}
+} // End of ZenMesher class
 
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new ZenMesher();
