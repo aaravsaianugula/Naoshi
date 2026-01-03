@@ -13,11 +13,7 @@ import uvicorn
 from contextlib import asynccontextmanager
 
 # Import existing backend logic
-try:
-    from mesh_repair import repair_worker
-    import simple_pid 
-except ImportError:
-    pass
+from mesh_repair import repair_worker
 
 from multiprocessing import Process, Queue
 import queue # for queue.Empty exception
@@ -320,7 +316,15 @@ async def download_fixed(file_id: str):
 if os.path.exists(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="static")
 
-# ... existing code ...
+# Disable Caching for Development
+@app.middleware("http")
+async def add_no_cache_header(request: Request, call_next):
+    response = await call_next(request)
+    # Apply to all responses to be safe
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 def find_free_port(start_port=8000):
     """Finds the first available port starting from start_port."""

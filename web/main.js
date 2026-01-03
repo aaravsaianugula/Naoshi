@@ -1,13 +1,34 @@
 import * as THREE from 'three';
-import { ModelViewer } from './viewer.js?v=4';
-import { MeshEditor } from './mesh-editor.js?v=4';
+import { ModelViewer } from './viewer.js?v=79';
+import { MeshEditor } from './mesh-editor.js?v=79';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+import { BackgroundEffect } from './background_effect.js';
+import { Animations } from './animations.js';
 
 // Debug Alert (Removed)
 
-class ZenMesher {
+class ZenNaoshi {
     constructor() {
         this.viewer = new ModelViewer('viewer-container');
+
+        // Flash Listener
+        document.addEventListener('viewer-flash', () => {
+            const flash = document.createElement('div');
+            flash.id = 'flash-overlay';
+            document.body.appendChild(flash);
+
+            requestAnimationFrame(() => {
+                document.body.classList.add('flash-active');
+                // Remove after transition
+                setTimeout(() => {
+                    document.body.classList.remove('flash-active');
+                    setTimeout(() => flash.remove(), 200);
+                }, 300); // Short flash
+            });
+        });
+
+        // Initialize UI Elements (Moved to init())
+        // this.initUI();
         this.activeFile = null;
         this.serverId = null;
 
@@ -79,8 +100,105 @@ class ZenMesher {
         this.init();
     }
 
+    initUI() {
+        // File Input
+        // this.ui.dropZone.addEventListener('click', () => this.ui.fileInput.click()); // REMOVED: Input covers zone
+        this.ui.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+
+        // Drag & Drop
+        this.ui.dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.ui.dropZone.classList.add('active');
+        });
+        this.ui.dropZone.addEventListener('dragleave', () => {
+            this.ui.dropZone.classList.remove('active');
+        });
+        this.ui.dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.ui.dropZone.classList.remove('active');
+            if (e.dataTransfer.files.length) {
+                this.handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Orientation
+        this.ui.btnAutoOrient.addEventListener('click', () => this.autoOrient());
+        this.ui.btnPickFace.addEventListener('click', () => this.viewer.enableFaceSelection(true));
+
+        // Repair
+        this.ui.btnStartRepair.addEventListener('click', () => this.startRepair());
+        this.ui.btnDownload.addEventListener('click', () => this.downloadResult());
+
+        // View Controls
+        this.ui.btnReset.addEventListener('click', () => this.viewer.resetView());
+        this.ui.btnFit.addEventListener('click', () => this.viewer.fitView());
+
+        // Mesh Editing
+        this.ui.btnSelectFace.addEventListener('click', () => {
+            this.meshEditor.setSelectionMode('face');
+            this.ui.btnSelectFace.classList.toggle('active');
+        });
+        this.ui.btnThicken.addEventListener('click', () => this.meshEditor.thickenSelection(0.5)); // Default 0.5mm
+        this.ui.btnClearSel.addEventListener('click', () => this.meshEditor.clearSelection());
+
+        // Shapes
+        this.ui.btnAddCube.addEventListener('click', () => this.addShape('cube'));
+        this.ui.btnAddCylinder.addEventListener('click', () => this.addShape('cylinder'));
+        this.ui.btnAddSphere.addEventListener('click', () => this.addShape('sphere'));
+        this.ui.btnAddCone.addEventListener('click', () => this.addShape('cone'));
+
+        // Shape Validation
+        this.ui.btnValidateMesh.addEventListener('click', () => this.validateActiveMesh());
+        this.ui.btnJoinMeshes.addEventListener('click', () => this.joinShapeToMesh());
+
+        // Sketch Events (Recovered)
+        const btnClearAll = document.getElementById('btn-clear-all');
+        if (btnClearAll) btnClearAll.addEventListener('click', () => this.clearAll());
+
+        const btnSketchRect = document.getElementById('btn-sketch-rect');
+        if (btnSketchRect) btnSketchRect.addEventListener('click', () => this.addSketch('rect'));
+
+        const btnExtrude = document.getElementById('btn-extrude-sketch');
+        if (btnExtrude) btnExtrude.addEventListener('click', () => this.extrudeSelectedSketch());
+
+        // Prevent default window drag/drop
+        window.addEventListener('dragover', (e) => e.preventDefault());
+        window.addEventListener('drop', (e) => e.preventDefault());
+
+        // FIX: Toolbar Buttons (Pause Rotation, Wireframe, etc.)
+        // These use delegation on 'toolbar-bottom' or individual listeners if IDs not present
+        this.ui.toolbarBottom.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            if (!action) return;
+
+            switch (action) {
+                case 'rotate':
+                    const isRotating = this.viewer.toggleRotation();
+                    btn.classList.toggle('active', isRotating);
+                    break;
+                case 'wireframe':
+                    this.viewer.toggleWireframe();
+                    btn.classList.toggle('active');
+                    break;
+                case 'texture':
+                    // Toggle Toon/Solid? For now just toggle Grid as proxy or impl new method
+                    // this.viewer.toggleShading(); 
+                    break;
+                case 'grid':
+                    this.viewer.toggleGrid();
+                    btn.classList.toggle('active');
+                    break;
+                case 'fit':
+                    this.viewer.fitView();
+                    break;
+            }
+        });
+    }
+
     init() {
-        console.log("Mesher v3.0 Init");
+        console.log("Naoshi v3.0 Init");
 
         // Initialize MeshEditor
         this.meshEditor = new MeshEditor(this.viewer);
@@ -97,14 +215,24 @@ class ZenMesher {
         this.shapeMouse = new THREE.Vector2();
 
         // Recent models cache (max 5)
-        this.RECENT_MODELS_KEY = 'mesher_recent_models';
+        this.RECENT_MODELS_KEY = 'naoshi_recent_models';
         this.MAX_RECENT_MODELS = 5;
 
-        this.setupEvents();
-        this.setupOrientationEvents();
+        this.RECENT_MODELS_KEY = 'naoshi_recent_models';
+        this.MAX_RECENT_MODELS = 5;
+
+        this.initUI(); // Correct placement
+        // this.setupEvents(); // Replaced by initUI
+        // this.setupOrientationEvents(); // Replaced by initUI
         this.setupEditingEvents();
         this.setupTransformEvents();
         this.loadRecentModels();
+
+        // Initialize Background Effect
+        this.bgEffect = new BackgroundEffect('fluid-bg');
+
+        // Animate Landing
+        Animations.animateLandingText('#hero-title', '#hero-sub', '#drop-zone');
     }
 
     setupShapeSelectionEvents() {
@@ -196,54 +324,9 @@ class ZenMesher {
 
 
 
-    setupShapeEvents() {
-        // Shape creation buttons
-        if (this.ui.btnAddCube) {
-            this.ui.btnAddCube.addEventListener('click', () => this.addShape('cube'));
-        }
-        if (this.ui.btnAddCylinder) {
-            this.ui.btnAddCylinder.addEventListener('click', () => this.addShape('cylinder'));
-        }
-        if (this.ui.btnAddSphere) {
-            this.ui.btnAddSphere.addEventListener('click', () => this.addShape('sphere'));
-        }
-        if (this.ui.btnAddCone) {
-            this.ui.btnAddCone.addEventListener('click', () => this.addShape('cone'));
-        }
 
-        // Join meshes
-        if (this.ui.btnJoinMeshes) {
-            this.ui.btnJoinMeshes.addEventListener('click', () => this.joinMeshes());
-        }
 
-        // Validate mesh
-        if (this.ui.btnValidateMesh) {
-            this.ui.btnValidateMesh.addEventListener('click', () => this.validateMesh());
-        }
 
-        // Clear All
-        const btnClearAll = document.getElementById('btn-clear-all');
-        if (btnClearAll) {
-            btnClearAll.addEventListener('click', () => this.clearAll());
-        }
-
-        // 2D Sketch Buttons
-        const btnSketchRect = document.getElementById('btn-sketch-rect');
-        const btnSketchCircle = document.getElementById('btn-sketch-circle');
-        const btnSketchTri = document.getElementById('btn-sketch-tri');
-        const btnSketchLine = document.getElementById('btn-sketch-line');
-        const btnExtrudeSketch = document.getElementById('btn-extrude-sketch');
-
-        if (btnSketchRect) btnSketchRect.addEventListener('click', () => this.addSketch('rect'));
-        if (btnSketchCircle) btnSketchCircle.addEventListener('click', () => this.addSketch('circle'));
-        if (btnSketchTri) btnSketchTri.addEventListener('click', () => this.addSketch('tri'));
-        if (btnSketchLine) btnSketchLine.addEventListener('click', () => this.addSketch('line'));
-        if (btnExtrudeSketch) btnExtrudeSketch.addEventListener('click', () => this.extrudeSelectedSketch());
-
-        // Project Geometry (like Inventor)
-        const btnProjectGeometry = document.getElementById('btn-project-geometry');
-        if (btnProjectGeometry) btnProjectGeometry.addEventListener('click', () => this.projectGeometry());
-    }
 
     projectGeometry() {
         // Like Inventor's "Project Geometry" - project mesh edges onto a sketch plane
@@ -1200,6 +1283,15 @@ class ZenMesher {
             case 'orientation':
                 this.ui.centerStage.classList.add('hidden');
 
+                // Fade out fluid background, Fade in 3D Viewer
+                const bg = document.getElementById('fluid-bg');
+                if (bg) {
+                    bg.style.transition = "opacity 1s ease";
+                    bg.style.opacity = "0";
+                }
+                const viewer = document.getElementById('viewer-container');
+                if (viewer) viewer.style.opacity = "1";
+
                 // Show UI
                 setTimeout(() => {
                     [this.ui.sidebarLeft, this.ui.sidebarRight, this.ui.toolbarBottom, this.ui.editToolbar].forEach(el => {
@@ -1289,6 +1381,13 @@ class ZenMesher {
         if (container.children.length > 50) container.removeChild(container.lastChild);
     }
 
+    async handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (file) {
+            this.handleFile(file);
+        }
+    }
+
     async handleFile(file) {
         console.log("handleFile started for:", file.name);
         try {
@@ -1344,18 +1443,31 @@ class ZenMesher {
 
     async startRepair() {
         this.setState('repairing');
+
+        // ENTER REPAIR MODE (Focus & Dark)
+        document.body.classList.add('repair-active');
+
         try {
             if (!this.serverId) await this.uploadPromise;
 
             const currentMatrix = this.viewer.getCurrentTransformArray();
             const body = {};
             if (currentMatrix) body.transform = currentMatrix;
+            this.updateStatus('Starting Repair...', 0);
 
-            await fetch(`/api/repair/${this.serverId}`, {
+            // Trigger Cinematic Start
+            if (this.viewer) this.viewer.startRepair();
+
+            // API Call
+            const res = await fetch(`/api/repair/${this.serverId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Repair start failed");
+            }
 
             // WebSocket
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1363,38 +1475,90 @@ class ZenMesher {
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                console.log("WS Message:", data);
+
                 if (data.type === 'progress') {
                     this.updateStatus(data.text, data.value * 100);
+                    // Critical: Update visual progress
+                    if (this.viewer) this.viewer.updateRepairProgress(data.value);
+                } else if (data.type === 'status') {
+                    this.updateStatus(data.text, null);
                 } else if (data.type === 'done') {
                     this.updateStatus('Complete', 100);
+                    if (this.viewer) this.viewer.updateRepairProgress(1.0); // Force complete
                     this.showToast("Repair Complete! Loading...");
 
-                    // Auto-load Results
+                    // Auto-load Results with Cinematic Delay
                     const resultUrl = `/api/download/${this.serverId}`;
-                    this.viewer.loadSTL(resultUrl, () => {
-                        this.showToast("Fixed Model Loaded");
-                        // Reset visuals
-                        if (this.viewer.updateRepairProgress) this.viewer.updateRepairProgress(0);
+                    const self = this; // Store reference for callback context
+                    setTimeout(() => {
+                        // 1. Finish repair mode (cleanup anime state)
+                        if (self.viewer) self.viewer.finishRepair();
 
-                        // Save to recent models cache
-                        const filename = this.currentFilename || `fixed_${this.serverId}.stl`;
-                        this.saveToRecentModels(filename, resultUrl);
-                    });
+                        // 2. Load the fixed model
+                        self.viewer.loadSTL(resultUrl, () => {
+                            console.log("loadSTL callback executing - resetting UI");
+                            self.showToast("Fixed Model Loaded");
 
-                    this.setState('success');
-                    ws.close();
-                    if (this.ui.infoWaterproof) {
-                        this.ui.infoWaterproof.textContent = "Yes";
-                        this.ui.infoWaterproof.style.color = "var(--color-success)";
-                    }
+                            // 3. Exit repair-active mode
+                            document.body.classList.remove('repair-active');
+
+                            // 4. Show download button (DIRECT DOM ACCESS - guaranteed to work)
+                            const btnDownload = document.getElementById('btn-download');
+                            if (btnDownload) {
+                                btnDownload.classList.remove('hidden');
+                                btnDownload.style.display = 'flex';
+                                console.log("Download button shown");
+                            }
+
+                            // 5. Reset repair button (DIRECT DOM ACCESS - guaranteed to work)
+                            const btnStartRepair = document.getElementById('btn-start-repair');
+                            if (btnStartRepair) {
+                                btnStartRepair.innerHTML = '<i class="ph ph-sparkle"></i> Repair Model';
+                                btnStartRepair.disabled = false;
+                                console.log("Repair button reset successfully");
+                            }
+                        }, true); // Keep Camera
+                    }, 1500); // 1.5s Delay for "Glory Moment"
+
+
+                } else if (data.type === 'error') {
+                    this.showToast(`Repair Error: ${data.message}`);
+                    document.body.classList.remove('repair-active');
                 }
             };
+
+            ws.onerror = (e) => {
+                console.error("WebSocket Error:", e);
+                this.showToast("Connection Error Details in Console");
+                document.body.classList.remove('repair-active');
+            };
+
         } catch (e) {
-            console.error(e);
-            this.showToast("Repair failed");
-            this.ui.btnStartRepair.disabled = false;
-            this.ui.btnStartRepair.textContent = "Retry";
+            console.error("Repair Error:", e);
+            this.showToast(e.message);
+            document.body.classList.remove('repair-active');
         }
+    }
+
+    // Download the fixed model
+    downloadResult() {
+        if (!this.serverId) {
+            this.showToast("No repaired model available. Run repair first.");
+            return;
+        }
+
+        const downloadUrl = `/api/download/${this.serverId}`;
+
+        // Create a temporary link and trigger download
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `fixed_${this.activeFile?.name || 'model.stl'}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        this.showToast("Downloading fixed model...");
     }
 
     // --- Recent Models ---
@@ -1513,8 +1677,8 @@ class ZenMesher {
         }
     }
 
-} // End of ZenMesher class
+} // End of ZenNaoshi class
 
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new ZenMesher();
+    window.app = new ZenNaoshi();
 });

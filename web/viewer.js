@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+// Post Processing imports
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+import { createToonMaterial, SpiritWisps, InkWashBackground, ScanningLaser } from './visual_theme_donghua.js';
 
 // alert("Viewer Module Loaded"); // Debug
 
@@ -24,16 +30,18 @@ export class ModelViewer {
     init() {
         // Scene Setup
         this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.Fog(0xf0f4f8, 200, 1000);
+        this.scene.background = new THREE.Color(0xf5f7fa); // STUDIO MODE: Light Grey
+        // this.scene.fog = new THREE.Fog(0xf5f7fa, 500, 2000); // DISABLED: Was causing "Ghosting" washout
 
         // Camera
         this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
         this.camera.position.set(0, 60, 120);
 
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // Renderer (Standard Opaque)
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setClearColor(0xf5f7fa, 1); // FORCE LIGHT GREY
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.container.appendChild(this.renderer.domElement);
@@ -53,21 +61,32 @@ export class ModelViewer {
         });
         this.scene.add(this.transformControl);
 
-        // Lighting (High Contrast Studio Setup)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // reduced slightly
+        // Lighting (Anime Studio Setup) - REDUCED for Light Mode
+        // High intensity led to washout. Now balanced for 0xf5f7fa background.
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Was 0.8
         this.scene.add(ambientLight);
 
-        // Key Light (Warm, creating form)
-        const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        // Rim Light (Strong back light for toon edges)
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.8); // Was 1.5
         mainLight.position.set(50, 80, 50);
         mainLight.castShadow = true;
-        mainLight.shadow.mapSize.width = 2048;
-        mainLight.shadow.mapSize.height = 2048;
-        mainLight.shadow.bias = -0.0001;
         this.scene.add(mainLight);
 
-        // Fill Light (Cool Blue shadows)
-        const fillLight = new THREE.DirectionalLight(0xcce3fe, 0.8);
+        // Post-Processing (Bloom)
+        this.composer = new EffectComposer(this.renderer);
+        const renderPass = new RenderPass(this.scene, this.camera);
+        this.composer.addPass(renderPass);
+
+        // Unreal Bloom: Resolution, Strength, Radius, Threshold
+        this.bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0.0, 0.4, 0.85 // Strength 0 initially
+        );
+        this.bloomPass.strength = 0.0;
+        this.bloomPass.radius = 0.5;
+        this.bloomPass.threshold = 0; // Bloom everything bright
+        this.composer.addPass(this.bloomPass);
+        const fillLight = new THREE.DirectionalLight(0xcce3fe, 0.5); // Was 0.8
         fillLight.position.set(-50, 20, 50);
         this.scene.add(fillLight);
 
@@ -145,40 +164,60 @@ export class ModelViewer {
         this.idleRotation = true;
     }
 
-    loadSTL(fileUrl, onLoadCallback) {
+    resetScene() {
+        if (this.mesh) {
+            this.scene.remove(this.mesh);
+            this.mesh.geometry.dispose();
+            // Don't dispose materials if valid
+        }
+        if (this.wireMesh) {
+            if (this.mesh) this.mesh.remove(this.wireMesh);
+            this.wireMesh.geometry.dispose();
+        }
+        if (this.arrowHelper) {
+            this.scene.remove(this.arrowHelper);
+            this.arrowHelper = null;
+        }
+        if (this.hoverArrow) {
+            this.scene.remove(this.hoverArrow);
+            this.hoverArrow = null;
+        }
+        this.mesh = null;
+        this.wireMesh = null;
+    }
+
+    loadSTL(url, onLoadCallback = null, keepCamera = false) {
+        // Reset Repair State
+        this.isRepairing = false;
         this.resetScene();
         this.idleRotation = false;
-        console.log("Loading STL from:", fileUrl);
+        console.log("Loading STL from:", url);
 
         const loader = new STLLoader();
         loader.load(
-            fileUrl,
+            url,
             (geometry) => {
                 try {
                     // console.log("STL Loaded, Geometry:", geometry);
                     geometry.center();
                     geometry.computeVertexNormals();
 
-                    // 1. Solid Material
-                    this.solidMaterial = new THREE.MeshPhysicalMaterial({
-                        color: 0xffffff,
-                        metalness: 0.1,
-                        roughness: 0.8,
-                        transmission: 0.0,
-                        thickness: 1.0,
-                        clearcoat: 0.0,
-                        polygonOffset: true,
-                        polygonOffsetFactor: 1,
-                        polygonOffsetUnits: 1
+                    // SAFE MATERIAL: Lambert "Matte Clay" (Professional CAD Look)
+                    // High Contrast Dark Grey against Light Background
+                    const material = new THREE.MeshLambertMaterial({
+                        color: 0x333333, // Charcoal
+                        emissive: 0x000000
                     });
 
-                    this.mesh = new THREE.Mesh(geometry, this.solidMaterial);
+                    this.mesh = new THREE.Mesh(geometry, material);
+                    this.solidMaterial = material;
                     this.mesh.castShadow = true;
                     this.mesh.receiveShadow = true;
+                    this.mesh.visible = true;
 
-                    // 2. Wireframe Overlay
+                    // 2. Wireframe Overlay (Subtle Tech)
                     this.wireMaterial = new THREE.MeshBasicMaterial({
-                        color: 0x2563EB,
+                        color: 0x4f46e5, // Indigo
                         wireframe: true,
                         transparent: true,
                         opacity: 0.0
@@ -186,38 +225,48 @@ export class ModelViewer {
                     this.wireMesh = new THREE.Mesh(geometry, this.wireMaterial);
                     this.mesh.add(this.wireMesh);
 
-                    this.initProgressiveVisuals();
+                    // NUCLEAR OPTION: DO NOT CREATE ANIME MESHES HERE.
+                    this.holoMesh = null;
+                    this.sparkles = null;
+                    this.bgMesh = null;
+                    this.magicCircle = null;
 
                     this.scene.add(this.mesh);
 
                     // Auto-Fit Camera (Non-destructive)
-                    this.fitCameraToMesh();
+                    if (!keepCamera) {
+                        this.fitCameraToMesh();
+                    }
 
                     // Re-init Raycaster
                     this.raycaster = new THREE.Raycaster();
                     this.mouse = new THREE.Vector2();
 
-                    // Listeners (duplicates are fine, or we can use named functions to remove)
-                    // Better to clean up previous listeners if possible, but bind returns new fn.
-                    // For now, it's okay for this session.
+                    // VISIBILITY FIX: Ensure model starts clean
+                    this.targetProgress = 0.0;
+                    this.visualProgress = 0.0;
 
-                    // VISIBILITY FIX: Ensure model fades in
-                    this.targetProgress = 1.0;
+                    // Force Background
+                    this.scene.background = new THREE.Color(0xf5f7fa);
+                    if (this.renderer) this.renderer.setClearColor(0xf5f7fa, 1);
 
-                    console.log("Model setup complete, calling callback.");
+                    console.log("Model setup complete (CAD Mode), calling callback.");
                     if (onLoadCallback) onLoadCallback();
 
                 } catch (e) {
                     console.error("Error in STL processing:", e);
-                    // Fallback to clear loading state?
+                    // Still call callback on error so UI can reset
+                    if (onLoadCallback) onLoadCallback();
                 }
             },
             (xhr) => {
                 // Progress
-                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                // console.log((xhr.loaded / xhr.total * 100) + '% loaded');
             },
             (error) => {
                 console.error("An error happened during STL loading:", error);
+                // Call callback on error so UI can reset
+                if (onLoadCallback) onLoadCallback();
             }
         );
     }
@@ -333,21 +382,59 @@ export class ModelViewer {
             if (typeof gsap !== 'undefined') {
                 gsap.to(this.mesh.rotation, {
                     x: endEuler.x, y: endEuler.y, z: endEuler.z,
-                    duration: 0.8, ease: "back.out(1.7)"
+                    duration: 0.8,
+                    ease: "back.out(1.7)",
+                    onUpdate: () => {
+                        this.mesh.updateMatrix();
+                    },
+                    onComplete: () => {
+                        // Snap to Floor
+                        this.mesh.updateMatrixWorld(true);
+                        this.mesh.geometry.computeBoundingBox();
+                        const bbox = new THREE.Box3().setFromObject(this.mesh);
+                        const minY = bbox.min.y;
+
+                        // Shift up
+                        const targetY = this.mesh.position.y - minY;
+
+                        gsap.to(this.mesh.position, {
+                            y: targetY,
+                            duration: 0.5,
+                            ease: "power2.out"
+                        });
+
+                        this.showToast("Aligned & Snapped to Floor");
+
+                        // CLEAR ARROW
+                        if (this.currentArrow) {
+                            this.scene.remove(this.currentArrow);
+                            this.currentArrow = null;
+                        }
+
+                        // Don't auto-reattach gizmo. User wants clean view.
+                        // if (this.transformControl) this.transformControl.attach(this.mesh);
+
+                        // Final transform update
+                        this.currentTransform = this.mesh.matrix.clone();
+                    }
                 });
             } else {
                 this.mesh.rotation.copy(endEuler);
-            }
 
-            this.mesh.updateMatrix();
-            this.currentTransform = this.mesh.matrix.clone();
+                // Snap immediately
+                this.mesh.updateMatrixWorld(true);
+                const bbox = new THREE.Box3().setFromObject(this.mesh);
+                this.mesh.position.y -= bbox.min.y;
+
+                this.showToast("Aligned & Snapped to Floor");
+            }
 
             this.showArrow(hit.point, target);
 
             setTimeout(() => {
                 this.enableFaceSelection(false);
                 document.dispatchEvent(new CustomEvent('orientation-complete'));
-            }, 600);
+            }, 1000);
         } else {
             this.showToast("Missed Mesh");
         }
@@ -361,10 +448,11 @@ export class ModelViewer {
 
     showArrow(origin, dir) {
         if (this.arrowHelper) this.scene.remove(this.arrowHelper);
-        this.arrowHelper = new THREE.ArrowHelper(dir, origin, 20, 0xffff00);
-        this.scene.add(this.arrowHelper);
+        if (this.currentArrow) this.scene.remove(this.currentArrow);
+        this.currentArrow = new THREE.ArrowHelper(dir, origin, 20, 0xffff00); // Using dir for direction, and hardcoded length/hex
+        this.scene.add(this.currentArrow);
+        return this.currentArrow;
     }
-
     getCurrentTransformArray() {
         if (!this.currentTransform) return null;
         return this.currentTransform.elements; // Column-major array for ThreeJS, need to check if numpy/trimesh expects row/col?
@@ -517,186 +605,289 @@ export class ModelViewer {
 
     // --- Progressive Visualization Methods ---
 
+    resetScene() {
+        if (this.mesh) {
+            this.scene.remove(this.mesh);
+            this.mesh.geometry.dispose();
+            // Don't dispose materials if valid
+        }
+        if (this.wireMesh) {
+            if (this.mesh) this.mesh.remove(this.wireMesh);
+            this.wireMesh.geometry.dispose();
+        }
+
+        // NUCLEAR CLEANUP: Destroy Anime Assets
+        if (this.holoMesh) {
+            this.scene.remove(this.holoMesh); // Removed from SCENE now
+            this.holoMesh.geometry.dispose();
+            this.holoMesh = null;
+        }
+        if (this.sparkles) {
+            this.sparkles.dispose();
+            this.sparkles = null;
+        }
+        if (this.bgMesh) {
+            this.scene.remove(this.bgMesh);
+            this.bgMesh.geometry.dispose();
+            this.bgMesh = null;
+        }
+        if (this.magicCircle && this.magicCircle.dispose) {
+            this.magicCircle.dispose();
+            this.magicCircle = null;
+        }
+
+        if (this.arrowHelper) {
+            this.scene.remove(this.arrowHelper);
+            this.arrowHelper = null;
+        }
+        if (this.hoverArrow) {
+            this.scene.remove(this.hoverArrow);
+            this.hoverArrow = null;
+        }
+
+        // RESTORE STUDIO STATE
+        this.scene.background = new THREE.Color(0xf5f7fa);
+        if (this.renderer) this.renderer.setClearColor(0xf5f7fa, 1);
+        if (this.gridHelper) this.gridHelper.visible = true;
+
+        this.mesh = null;
+        this.wireMesh = null;
+    }
+
+    // Deprecated: No longer auto-inited
     initProgressiveVisuals() {
-        // Particle System
-        if (this.particles) {
-            this.scene.remove(this.particles);
-            this.particles.geometry.dispose();
-            this.particles.material.dispose();
+        // Logic moved to startRepair
+    }
+
+
+
+
+    startRepair() {
+        console.log("=== startRepair() BEGIN ===");
+
+        this.isRepairing = true;
+        this.targetProgress = 0.0;
+        this.visualProgress = 0.0;
+
+        if (!this.mesh) {
+            console.error("FATAL: No mesh exists! Cannot start repair.");
+            return;
         }
 
-        // Scan Beam (New)
-        if (this.scanBeam) {
-            this.scene.remove(this.scanBeam);
-            this.scanBeam.geometry.dispose();
-            this.scanBeam.material.dispose();
+        // ===== PHASE 1: TOON SHADER SETUP =====
+
+        // 1. Create Toon Material
+        this.toonMaterial = createToonMaterial();
+
+        // 2. Create holoMesh (decoupled from original mesh) using Toon shader
+        if (this.holoMesh) {
+            this.scene.remove(this.holoMesh);
+            this.holoMesh.geometry.dispose();
+        }
+        this.holoMesh = new THREE.Mesh(this.mesh.geometry.clone(), this.toonMaterial);
+        this.holoMesh.position.copy(this.mesh.position);
+        this.holoMesh.rotation.copy(this.mesh.rotation);
+        this.holoMesh.scale.copy(this.mesh.scale);
+        this.holoMesh.updateMatrixWorld(true);
+        this.scene.add(this.holoMesh);
+        this.holoMesh.visible = true;
+
+        // 3. Hide the original CAD mesh
+        this.mesh.visible = false;
+
+        // 4. Calculate WORLD SPACE bounds for shader uniforms
+        const box = new THREE.Box3().setFromObject(this.holoMesh);
+        const minY = box.min.y;
+        const maxY = box.max.y;
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+
+        console.log("DEBUG: World bounds - minY:", minY, "maxY:", maxY, "center:", center);
+
+        // Set initial uniforms
+        this.toonMaterial.uniforms.uMinY.value = minY;
+        this.toonMaterial.uniforms.uMaxY.value = maxY;
+        this.toonMaterial.uniforms.uProgress.value = 0.0;
+
+        // ===== PHASE 2: SCENE SETUP =====
+
+        // 5. Hide grid for cinematic look
+        if (this.gridHelper) this.gridHelper.visible = false;
+
+        // 6. Anime sky background
+        this.scene.background = new THREE.Color(0xe6f3ff); // Pale Anime Blue
+        this.renderer.setClearColor(0xe6f3ff, 1);
+
+        // 7. Enhanced lighting for anime style
+        if (!this.repairLight) {
+            this.repairLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            this.repairLight.position.set(50, 100, 50);
+            this.scene.add(this.repairLight);
         }
 
-        const particleCount = 60;
-        const geom = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const velocities = new Float32Array(particleCount * 3);
+        // 8. Camera setup (looking at center)
+        const fov = this.camera.fov * (Math.PI / 180);
+        const cameraZ = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5;
 
-        for (let i = 0; i < particleCount * 3; i++) {
-            positions[i] = (Math.random() - 0.5) * 60;
-            velocities[i] = (Math.random() - 0.5) * 0.2;
+        this.camera.position.set(center.x + maxDim * 0.3, center.y + maxDim * 0.3, center.z + cameraZ);
+        this.camera.lookAt(center);
+        this.camera.updateProjectionMatrix();
+
+        this.controls.target.copy(center);
+        this.controls.autoRotate = true; // Slow cinematic orbit
+        this.controls.autoRotateSpeed = 0.5; // Very slow
+        this.controls.update();
+
+        // 9. Disable broken cinematic camera
+        this.isCinematic = false;
+
+        // 10. Cleanup gizmos
+        this.detachTransform();
+        if (this.currentArrow) {
+            this.scene.remove(this.currentArrow);
+            this.currentArrow = null;
         }
-        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geom.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
 
-        const partMat = new THREE.PointsMaterial({
-            color: 0x00ffff,
-            size: 0.6,
-            transparent: true,
-            opacity: 0.0,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
+        // 11. Force immediate render
+        this.renderer.render(this.scene, this.camera);
 
-        this.particles = new THREE.Points(geom, partMat);
-        this.scene.add(this.particles);
-
-        // Scan Beam Setup
-        const beamGeom = new THREE.PlaneGeometry(200, 200);
-        const beamMat = new THREE.MeshBasicMaterial({
-            color: 0x00ff41, // Hacker Green
-            transparent: true,
-            opacity: 0.1,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending
-        });
-        this.scanBeam = new THREE.Mesh(beamGeom, beamMat);
-        this.scanBeam.rotation.x = -Math.PI / 2;
-        this.scanBeam.visible = false;
-
-        // Beam Edges
-        const edges = new THREE.EdgesGeometry(beamGeom);
-        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00ff41, transparent: true, opacity: 0.5 }));
-        this.scanBeam.add(line);
-
-        this.scene.add(this.scanBeam);
-
-        this.targetProgress = 0;
-        this.visualProgress = 0;
-        this.pulseTime = 0;
+        console.log("=== startRepair() END - Toon Shader Active ===");
     }
 
     updateRepairProgress(progress) {
         this.targetProgress = progress;
+        console.log("updateRepairProgress called with:", progress);
+    }
+
+    // Called when repair is complete - cleans up anime state
+    finishRepair() {
+        console.log("finishRepair() called - cleaning up anime state");
+        this.isRepairing = false;
+
+        // Remove holoMesh
+        if (this.holoMesh) {
+            this.scene.remove(this.holoMesh);
+            if (this.holoMesh.geometry) this.holoMesh.geometry.dispose();
+            if (this.holoMesh.material) this.holoMesh.material.dispose();
+            this.holoMesh = null;
+        }
+
+        // Remove anime assets
+        this.toonMaterial = null;
+        if (this.sparkles) this.sparkles = null;
+        if (this.bgMesh) {
+            this.scene.remove(this.bgMesh);
+            this.bgMesh = null;
+        }
+        if (this.magicCircle) {
+            if (this.magicCircle.mesh) this.scene.remove(this.magicCircle.mesh);
+            this.magicCircle = null;
+        }
+
+        // Restore CAD mesh visibility
+        if (this.mesh) {
+            this.mesh.visible = true;
+            if (this.solidMaterial) this.mesh.material = this.solidMaterial;
+        }
+
+        // Restore grid
+        if (this.gridHelper) this.gridHelper.visible = true;
+
+        // Reset background to studio grey
+        this.scene.background = new THREE.Color(0xf5f7fa);
+        if (this.renderer) this.renderer.setClearColor(0xf5f7fa, 1);
+
+        // Stop auto-rotate
+        this.controls.autoRotate = false;
+
+        // Reset progress
+        this.targetProgress = 0;
+        this.visualProgress = 0;
+
+        console.log("finishRepair() complete - back to CAD mode");
     }
 
     /*
      * Applied every frame to blend visuals based on smoothed 'visualProgress'
      */
     applyVisualProgress(progress) {
-        if (!this.mesh || !this.solidMaterial || !this.wireMaterial) return;
+        if (!this.mesh) return;
 
-        // Scan Beam Animation
-        if (this.scanBeam && this.mesh.geometry) {
-            if (progress > 0.01 && progress < 0.99) {
-                this.scanBeam.visible = true;
+        // Check if we have core anime assets (holoMesh + toonMaterial)
+        // Sparkles and other effects are optional
+        const hasAnimeAssets = this.holoMesh && this.toonMaterial;
 
-                // Compute bounds lazily
-                if (!this.mesh.geometry.boundingBox) this.mesh.geometry.computeBoundingBox();
-                const bbox = this.mesh.geometry.boundingBox;
-                const height = bbox.max.y - bbox.min.y;
-                const center = (bbox.max.x + bbox.min.x) / 2;
-                const centerZ = (bbox.max.z + bbox.min.z) / 2;
-
-                // Animate Position (Loop scan every 30% progress or just 0-100 linear?) 
-                // User said "getting overwritten", so simple bottom-up linear is best.
-                const curY = bbox.min.y + (height * progress);
-                this.scanBeam.position.set(center, curY, centerZ);
-
-                // Scale beam to fit
-                const maxDim = Math.max(bbox.max.x - bbox.min.x, bbox.max.z - bbox.min.z) * 1.5;
-                this.scanBeam.scale.set(maxDim / 200, maxDim / 200, 1);
-
-            } else {
-                this.scanBeam.visible = false;
+        if (!hasAnimeAssets) {
+            // Fallback: Just keep mesh visible
+            if (this.mesh) {
+                this.mesh.visible = true;
             }
-        }
-
-        // If user manually toggled wireframe, skip automated wireframe blending
-        if (this.overrideWireframe) {
-            this.wireMaterial.opacity = 0.5;
-            this.solidMaterial.opacity = 1.0;
             return;
         }
 
-        this.pulseTime += 0.05;
-        const pulse = Math.sin(this.pulseTime) * 0.1 + 0.9; // 0.8 to 1.0
+        // ===== ACTIVE REPAIR: Update Toon Shader =====
 
-        // --- VISUAL STAGES ---
-
-        // 1. SCANNING (0% - 25%)
-        // Wireframe dominates. Solid is ghost.
-        if (progress < 0.25) {
-            // Normalized phase progress 0-1
-            const p = progress / 0.25;
-
-            // Wireframe fades in scanning pulse
-            this.wireMaterial.opacity = THREE.MathUtils.lerp(0.0, 0.4, p) * pulse;
-            this.solidMaterial.opacity = 0;
-
-            // Particles wake up
-            this.particles.material.opacity = THREE.MathUtils.lerp(0, 0.3, p);
+        // 1. Update shader uniforms
+        if (this.toonMaterial.uniforms) {
+            this.toonMaterial.uniforms.uProgress.value = progress;
+            this.toonMaterial.uniforms.uTime.value = performance.now() * 0.001;
         }
 
-        // 2. CONSTRUCTING (25% - 60%)
-        // Cross-fade: Wireframe out, Solid (Rough) in.
-        else if (progress < 0.6) {
-            const p = (progress - 0.25) / 0.35; // 0 to 1
+        // 2. Ensure holoMesh is visible
+        this.holoMesh.visible = true;
 
-            // Wireframe fades out
-            this.wireMaterial.opacity = THREE.MathUtils.lerp(0.4, 0.05, p);
+        // 3. Hide CAD mesh
+        this.mesh.visible = false;
 
-            // Solid fades in (Rough/Clay look)
-            this.solidMaterial.opacity = THREE.MathUtils.lerp(0.0, 0.8, p);
-            this.solidMaterial.roughness = 0.8;
-            this.solidMaterial.metalness = 0.1;
-            this.solidMaterial.color.setHex(0xe0e0e0); // Light Grey
-
-            // Peak particles
-            this.particles.material.opacity = 0.8;
-            this.particles.material.size = 0.8 * pulse;
+        // 4. Handle optional effects
+        if (this.sparkles && this.sparkles.points) {
+            this.sparkles.points.visible = true;
         }
-
-        // 3. REFINING (60% - 90%)
-        // Solid transforms to Premium (Glass/Plastic). Wireframe gone.
-        else if (progress < 0.95) {
-            const p = (progress - 0.6) / 0.35;
-            const smoothP = p * p * (3 - 2 * p); // Smoothstep
-
-            this.wireMaterial.opacity = 0;
-
-            // Material Properties Morph
-            this.solidMaterial.opacity = THREE.MathUtils.lerp(0.8, 1.0, smoothP);
-            this.solidMaterial.roughness = THREE.MathUtils.lerp(0.8, 0.2, smoothP);
-            this.solidMaterial.metalness = THREE.MathUtils.lerp(0.1, 0.1, smoothP); // keep low
-            this.solidMaterial.transmission = THREE.MathUtils.lerp(0.0, 0.1, smoothP);
-            this.solidMaterial.clearcoat = THREE.MathUtils.lerp(0.0, 1.0, smoothP);
-
-            // Color shift to pure white
-            this.solidMaterial.color.setHSL(0, 0, THREE.MathUtils.lerp(0.88, 1.0, smoothP));
-
-            // Particles fade
-            this.particles.material.opacity = THREE.MathUtils.lerp(0.8, 0.0, p);
+        if (this.magicCircle && this.magicCircle.mesh) {
+            this.magicCircle.mesh.visible = true;
         }
-
-        // 4. COMPLETED (100%)
-        else {
-            this.solidMaterial.opacity = 1.0;
-            this.solidMaterial.roughness = 0.2;
-            this.solidMaterial.clearcoat = 1.0;
-            this.solidMaterial.transmission = 0.1;
-            this.wireMaterial.opacity = 0;
-            this.particles.material.opacity = 0;
+        if (this.bgMesh) {
+            this.bgMesh.visible = true;
         }
+    }
 
-        // Need update
-        this.solidMaterial.needsUpdate = true;
+    triggerFlash() {
+        // Dispatch event for Main.js to handle DOM overlay flash
+        document.dispatchEvent(new CustomEvent('viewer-flash'));
+
+        // Success Bloom Burst (Ethereal)
+        if (this.bloomPass) {
+            const originalStrength = this.bloomPass.strength;
+            this.bloomPass.strength = 2.0; // Flash!
+
+            // Decay back to normal
+            let f = 2.0;
+            const decay = () => {
+                f *= 0.9;
+                if (f > 0.4) {
+                    this.bloomPass.strength = f;
+                    requestAnimationFrame(decay);
+                } else {
+                    this.bloomPass.strength = 0.4; // Return to gentle pulse
+                }
+            };
+            decay();
+        }
+        if (this.bloomPass) {
+            this.bloomPass.strength = 1.5; // Soft burst
+
+            // Decay
+            const decay = () => {
+                this.bloomPass.strength *= 0.95; // Slower decay
+                if (this.bloomPass.strength > 0.1) {
+                    requestAnimationFrame(decay);
+                } else {
+                    this.bloomPass.strength = 0.0;
+                }
+            };
+            requestAnimationFrame(decay);
+        }
     }
 
     // Gizmo Helpers
@@ -719,48 +910,81 @@ export class ModelViewer {
     }
 
     animate() {
-        requestAnimationFrame(this.animate.bind(this));
+        this.animationId = requestAnimationFrame(this.animate.bind(this));
 
-        this.controls.update();
-
-        // Smoothly interpolate visual progress
-        // This decouples choppy network updates from fluid visuals
-        this.visualProgress += (this.targetProgress - this.visualProgress) * 0.05;
-        this.applyVisualProgress(this.visualProgress);
-
-        // Animate Particles with Curl-like noise
-        if (this.particles && this.particles.material.opacity > 0.01) {
-            const positions = this.particles.geometry.attributes.position.array;
-            const vels = this.particles.geometry.attributes.velocity.array;
-            const time = Date.now() * 0.001;
-            const radius = 30;
-
-            for (let i = 0; i < positions.length; i += 3) {
-                // Organic Orbit Flow
-                const x = positions[i];
-                const y = positions[i + 1];
-                const z = positions[i + 2];
-
-                // Spiral up
-                positions[i + 1] += Math.sin(time * 0.5 + x * 0.1) * 0.1 + 0.05;
-                if (positions[i + 1] > 30) positions[i + 1] = -30;
-
-                // Orbit center
-                const angle = 0.01 * (1.0 + Math.sin(time * 0.2 + y * 0.1));
-                positions[i] = x * Math.cos(angle) - z * Math.sin(angle);
-                positions[i + 2] = x * Math.sin(angle) + z * Math.cos(angle);
-
-                // Breathing radius
-                // Simply move slightly towards/away from center based on height
-            }
-            this.particles.geometry.attributes.position.needsUpdate = true;
-
-            // Subtle rotation of the whole particle cloud
-            this.particles.rotation.y += 0.002;
+        // Update Camera Controls
+        if (this.controls && this.controls.enabled) {
+            this.controls.update();
         }
 
-        this.renderer.render(this.scene, this.camera);
+        const time = performance.now();
+
+        // 1. UPDATE VISUALS
+        if (this.isRepairing) {
+            // 1a. Update Progress
+            const smoothing = (this.targetProgress > 0.95) ? 0.05 : 0.02;
+            this.visualProgress += (this.targetProgress - this.visualProgress) * smoothing;
+
+            // Snap
+            if (Math.abs(this.targetProgress - this.visualProgress) < 0.001) {
+                this.visualProgress = this.targetProgress;
+            }
+
+            // 1b. Update Anime Shaders
+            this.applyVisualProgress(this.visualProgress);
+
+        } else {
+            // 2. IDLE STATE (CAD Mode)
+            // Ensure CAD mesh is visible and Anime is GONE
+            if (this.mesh) {
+                // FIX: Ensure the mesh object itself is visible
+                if (!this.mesh.visible) this.mesh.visible = true;
+
+                // CRITICAL FIX: Ensure the MATERIAL is the solid charcoal material
+                // (It might be the 'invisible cloak' from the repair state)
+                if (this.solidMaterial && this.mesh.material !== this.solidMaterial) {
+                    this.mesh.material = this.solidMaterial;
+                }
+
+                // Ensure Anime Ghosts are hidden
+                if (this.holoMesh) this.holoMesh.visible = false;
+                if (this.bgMesh) this.bgMesh.visible = false;
+                if (this.magicCircle && this.magicCircle.mesh) this.magicCircle.mesh.visible = false;
+                if (this.sparkles && this.sparkles.points) this.sparkles.points.visible = false;
+
+                // Reset Background to Studio Grey (SAFE - no getHex/setHex which crash)
+                // The old code called scene.background.getHex() which crashes if background is not a Color
+                // Just always set it to ensure it's a valid Color object
+                this.scene.background = new THREE.Color(0xf5f7fa);
+                if (this.renderer) this.renderer.setClearColor(0xf5f7fa, 1);
+            }
+        }
+
+        // Update Animated Components
+        if (this.magicCircle) this.magicCircle.update(time * 0.001, this.visualProgress, 0, 100);
+        if (this.sparkles) this.sparkles.update(time * 0.001);
+
+        // CINEMATIC CAMERA (DISABLED - The hardcoded lookAt was breaking visibility)
+        /*
+        if (this.isCinematic && this.cinematicStartPos && this.cinematicEndPos) {
+            const el = (performance.now() - this.cinematicStartTime) * 0.0001;
+            const t = Math.min(el, 1.0);
+            const ease = t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    
+            if (this.camera && this.camera.position) {
+                this.camera.position.lerpVectors(this.cinematicStartPos, this.cinematicEndPos, ease * 0.05);
+                this.camera.lookAt(0, 40, 0); // THIS WAS THE BUG - hardcoded position!
+            }
+        }
+        */
+
+        // RENDER: DIRECT (No Composer/Bloom to prevent Black Screen)
+        // This is the NUCLEAR FIX for reliability
+        if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
+
 
     fitCameraToMesh() {
         console.log("fitCameraToMesh executing...");

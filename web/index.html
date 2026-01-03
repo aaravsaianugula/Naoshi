@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mesher - Precision Repair</title>
+  <title>Naoshi - Precision Repair</title>
 
   <!-- Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,17 +45,18 @@
   <div id="app">
     <!-- Hidden Input removed (moved to drop zone) -->
 
-    <!-- Background -->
-    <div class="bg-grid"></div>
+    <!-- Background Layer (Fluid) -->
+    <div id="fluid-bg" style="position:fixed; inset:0; z-index:-1;"></div>
 
     <!-- 3D Container -->
-    <div id="viewer-container" style="position:fixed; inset:0; z-index:1;"></div>
+    <div id="viewer-container" style="position:fixed; inset:0; z-index:1; opacity:0; transition: opacity 1s ease;">
+    </div>
 
     <!-- Header (Floating) -->
     <header class="header-glass">
       <div class="brand">
         <div class="brand-mark"></div>
-        <span>Mesher</span>
+        <span>Naoshi</span>
       </div>
       <div style="display:flex; gap:16px; align-items:center;">
         <div id="status-indicator" class="hidden"
@@ -71,8 +72,8 @@
     <!-- Center Stage (Drop Zone) -->
     <div id="center-stage" class="center-stage">
       <div style="text-align:center;">
-        <div class="hero-title">Mesher</div>
-        <div class="hero-sub">Intelligent Mesh Optimization</div>
+        <div class="hero-title" id="hero-title">Naoshi</div>
+        <div class="hero-sub" id="hero-sub">Intelligent Mesh Optimization</div>
       </div>
 
       <div class="drop-card" id="drop-zone" style="position: relative;">
@@ -221,8 +222,8 @@
           <button class="segmented-btn active" id="btn-reset-view">
             <!-- Reuse reset for "Front" or use Auto Logic -->
             <!-- Wait, current JS uses btn-reset-view for Camera Reset. 
-                  The user wants Orientation Logic (Auto vs Pick).
-                  Let's map them correctly. -->
+                   The user wants Orientation Logic (Auto vs Pick).
+                   Let's map them correctly. -->
             <i class="ph ph-house"></i> Reset
           </button>
           <button class="segmented-btn" id="btn-auto-orient">
@@ -294,7 +295,7 @@
 
   </div>
 
-  <script type="module" src="/main.js?v=4"></script>
+  <script type="module" src="/main.js?v=79"></script>
 </body>
 
 </html>

@@ -1,9 +1,9 @@
 @echo off
-title Mesher - Precision Model Repair
+title Naoshi - Precision STL Repair
 color 0f
 
 echo ==========================================
-echo      Mesher - Precision Model Repair
+echo      Naoshi - Precision STL Repair
 echo ==========================================
 echo.
 

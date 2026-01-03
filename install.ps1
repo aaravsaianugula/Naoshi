@@ -1,14 +1,14 @@
-# Mesher One-Line Installer
+# Naoshi One-Line Installer
 
 $ErrorActionPreference = "Stop"
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "       Mesher App Installer" -ForegroundColor Cyan
+Write-Host "       Naoshi App Installer" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Setup Install Directory & Clean Old Versions
-$InstallDir = "$env:LOCALAPPDATA\Mesher"
-$ShortcutPath = "$env:USERPROFILE\Desktop\Mesher.lnk"
+$InstallDir = "$env:LOCALAPPDATA\Naoshi"
+$ShortcutPath = "$env:USERPROFILE\Desktop\Naoshi.lnk"
 
 Write-Host "[1/5] Preparing Install Directory..."
 if (Test-Path $ShortcutPath) {
@@ -25,7 +25,7 @@ Set-Location $InstallDir
 
 # 2. Download Application
 Write-Host "[2/5] Downloading latest version..."
-$ZipUrl = "https://github.com/aaravsaianugula/Mesher/archive/refs/heads/main.zip"
+$ZipUrl = "https://github.com/aaravsaianugula/Naoshi/archive/refs/heads/main.zip"
 $ZipFile = "$InstallDir\source.zip"
 
 try {
@@ -61,19 +61,31 @@ if (-not (Test-Path "venv")) {
     exit 1
 }
 
-Write-Host "      Installing dependencies (this may take a minute)..."
+Write-Host "      Installing Python dependencies (this may take a minute)..."
 .\venv\Scripts\python.exe -m pip install --upgrade pip --quiet
 .\venv\Scripts\pip install -r requirements.txt --quiet
+
+# Install Node.js dependencies for web frontend
+Write-Host "      Installing Node.js dependencies..."
+if (-not (Get-Command "npm" -ErrorAction SilentlyContinue)) {
+    Write-Host "Warning: npm not found. Web dependencies will not be installed." -ForegroundColor Yellow
+    Write-Host "         Install Node.js from https://nodejs.org for full functionality." -ForegroundColor Yellow
+}
+else {
+    Set-Location "$InstallDir\web"
+    npm install --quiet 2>$null
+    Set-Location $InstallDir
+}
 
 # 5. Create Shortcut
 Write-Host "[5/5] Creating Desktop Shortcut..."
 $WshShell = New-Object -comObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Mesher.lnk")
+$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Naoshi.lnk")
 $Shortcut.TargetPath = "$InstallDir\start.bat"
 $Shortcut.WorkingDirectory = $InstallDir
 $Shortcut.WindowStyle = 1
 $Shortcut.IconLocation = "$InstallDir\web\logo.png"
-$Shortcut.Description = "Mesher - Precision STL Repair"
+$Shortcut.Description = "Naoshi - Precision STL Repair"
 $Shortcut.Save()
 
 Write-Host ""
@@ -81,6 +93,7 @@ Write-Host "==========================================" -ForegroundColor Green
 Write-Host "      Installation Complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "You can now open 'Mesher' from your Desktop."
+Write-Host "You can now open 'Naoshi' from your Desktop."
 Write-Host "Press any key to exit..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
