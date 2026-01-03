@@ -11,9 +11,15 @@ $InstallDir = "$env:LOCALAPPDATA\Naoshi"
 $ShortcutPath = "$env:USERPROFILE\Desktop\Naoshi.lnk"
 
 Write-Host "[1/5] Preparing Install Directory..."
+$StartMenuShortcutPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Naoshi.lnk"
+
 if (Test-Path $ShortcutPath) {
-    Write-Host "      Removing old shortcut..." -ForegroundColor Gray
+    Write-Host "      Removing old desktop shortcut..." -ForegroundColor Gray
     Remove-Item -Path $ShortcutPath -Force
+}
+if (Test-Path $StartMenuShortcutPath) {
+    Write-Host "      Removing old Start Menu shortcut..." -ForegroundColor Gray
+    Remove-Item -Path $StartMenuShortcutPath -Force
 }
 
 if (Test-Path $InstallDir) {
@@ -78,23 +84,35 @@ else {
     Set-Location $InstallDir
 }
 
-# 5. Create Shortcut
-Write-Host "[5/5] Creating Desktop Shortcut..."
+# 5. Create Shortcuts (Desktop + Start Menu for search bar access)
+Write-Host "[5/5] Creating Shortcuts..."
 $WshShell = New-Object -comObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Naoshi.lnk")
-$Shortcut.TargetPath = "$InstallDir\start.bat"
-$Shortcut.WorkingDirectory = $InstallDir
-$Shortcut.WindowStyle = 1
-$Shortcut.IconLocation = "$InstallDir\web\logo.png"
-$Shortcut.Description = "Naoshi - Precision STL Repair"
-$Shortcut.Save()
+
+# Desktop Shortcut
+$DesktopShortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Naoshi.lnk")
+$DesktopShortcut.TargetPath = "$InstallDir\start.bat"
+$DesktopShortcut.WorkingDirectory = $InstallDir
+$DesktopShortcut.WindowStyle = 1
+$DesktopShortcut.IconLocation = "$InstallDir\icon.ico"
+$DesktopShortcut.Description = "Naoshi - Precision STL Repair"
+$DesktopShortcut.Save()
+
+# Start Menu Shortcut (for Windows Search and Start Menu access)
+$StartMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Naoshi.lnk"
+$StartMenuShortcut = $WshShell.CreateShortcut($StartMenuPath)
+$StartMenuShortcut.TargetPath = "$InstallDir\start.bat"
+$StartMenuShortcut.WorkingDirectory = $InstallDir
+$StartMenuShortcut.WindowStyle = 1
+$StartMenuShortcut.IconLocation = "$InstallDir\icon.ico"
+$StartMenuShortcut.Description = "Naoshi - Precision STL Repair"
+$StartMenuShortcut.Save()
 
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host "      Installation Complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "You can now open 'Naoshi' from your Desktop."
+Write-Host "You can now open 'Naoshi' from your Desktop or Windows Search bar."
 Write-Host "Press any key to exit..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
