@@ -973,22 +973,17 @@ class ZenMesher {
     }
 
     setupEvents() {
-        console.log("Setting up events...");
-        // Drop Zone Click
-        if (this.ui.dropZone) {
-            console.log("Dropzone found, attaching listener");
-            this.ui.dropZone.addEventListener('click', () => {
-                console.log("Dropzone clicked, triggering file input");
-                this.ui.fileInput.click();
-            });
-        } else {
-            console.error("Dropzone NOT found");
-        }
+        // Drop Zone Click handled by native input overlay
+        console.log("Setup Events: Using native input overlay");
 
-        this.ui.fileInput.addEventListener('change', (e) => {
-            console.log("File input changed", e.target.files);
-            if (e.target.files.length) this.handleFile(e.target.files[0]);
-        });
+        if (this.ui.fileInput) {
+            this.ui.fileInput.addEventListener('change', (e) => {
+                console.log("File input changed", e.target.files);
+                if (e.target.files.length) this.handleFile(e.target.files[0]);
+                // Reset value to allow re-selecting same file
+                e.target.value = '';
+            });
+        }
 
         // Global Drag & Drop logic
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {

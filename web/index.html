@@ -35,8 +35,7 @@
 
 <body>
   <div id="app">
-    <!-- Hidden Input -->
-    <input type="file" id="file-input" accept=".stl,.obj" style="display:none;">
+    <!-- Hidden Input removed (moved to drop zone) -->
 
     <!-- Background -->
     <div class="bg-grid"></div>
@@ -68,7 +67,11 @@
         <div class="hero-sub">Intelligent Mesh Optimization</div>
       </div>
 
-      <div class="drop-card" id="drop-zone">
+      <div class="drop-card" id="drop-zone" style="position: relative;">
+        <!-- Overlay File Input (Fail-safe) -->
+        <input type="file" id="file-input" accept=".stl,.obj"
+          style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 100;">
+
         <i class="ph ph-cube drop-icon"></i>
         <div style="font-weight:600; font-size:18px; color:var(--color-text-primary);">Upload Model</div>
         <div style="font-size:14px; color:var(--color-text-tertiary); margin-top:4px;">Drag & Drop STL / OBJ</div>
