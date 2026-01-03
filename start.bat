@@ -39,7 +39,8 @@ if %errorlevel% neq 0 (
 echo [4/4] Starting Application...
 echo.
 echo Opening browser...
-start http://localhost:8000
+REM Browser launch handled by python script now to support dynamic ports
+REM start http://localhost:8000
 
 echo Starting Server...
 echo Press Ctrl+C to stop.

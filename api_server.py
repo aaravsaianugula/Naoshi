@@ -320,5 +320,40 @@ async def download_fixed(file_id: str):
 if os.path.exists(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="static")
 
+# ... existing code ...
+
+def find_free_port(start_port=8000):
+    """Finds the first available port starting from start_port."""
+    port = start_port
+    while port < 65535:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("0.0.0.0", port))
+                return port
+            except OSError:
+                port += 1
+    raise IOError("No free ports found")
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import socket
+    import webbrowser
+    import threading
+
+    # 1. Find a free port
+    try:
+        port = find_free_port(8000)
+    except Exception as e:
+        print(f"Error finding port: {e}")
+        port = 8000
+
+    # 2. Open browser after a short delay (to let server start)
+    def open_browser():
+        url = f"http://localhost:{port}"
+        print(f"Opening browser at {url}")
+        webbrowser.open(url)
+
+    threading.Timer(1.5, open_browser).start()
+
+    # 3. Start Server
+    print(f"Starting server on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
