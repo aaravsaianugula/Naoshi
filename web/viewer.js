@@ -259,6 +259,16 @@ export class ModelViewer {
         }
     }
 
+    highlightFace(face, point) {
+        if (!this.mesh) return;
+        const normal = face.normal.clone();
+        normal.applyQuaternion(this.mesh.quaternion).normalize();
+
+        if (this.hoverArrow) this.scene.remove(this.hoverArrow);
+        this.hoverArrow = new THREE.ArrowHelper(normal, point, 20, 0xffff00);
+        this.scene.add(this.hoverArrow);
+    }
+
     onMouseMove(event) {
         if (!this.selectionMode) return;
 

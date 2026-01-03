@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { ModelViewer } from './viewer.js?v=3';
-import { MeshEditor } from './mesh-editor.js?v=3';
+import { ModelViewer } from './viewer.js?v=4';
+import { MeshEditor } from './mesh-editor.js?v=4';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 
 // Debug Alert (Removed)
