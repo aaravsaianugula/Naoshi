@@ -979,8 +979,11 @@ class ZenMesher {
         if (this.ui.fileInput) {
             this.ui.fileInput.addEventListener('change', (e) => {
                 console.log("File input changed", e.target.files);
-                if (e.target.files.length) this.handleFile(e.target.files[0]);
-                // Reset value to allow re-selecting same file
+                if (e.target.files.length) {
+                    // Alert to user to verify interception (Debug)
+                    // alert("File detected: " + e.target.files[0].name); 
+                    this.handleFile(e.target.files[0]);
+                }
                 e.target.value = '';
             });
         }
