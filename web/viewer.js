@@ -186,19 +186,10 @@ export class ModelViewer {
 
                     this.initProgressiveVisuals();
 
-                    // Auto-scale
-                    const box = new THREE.Box3().setFromObject(this.mesh);
-                    const size = box.getSize(new THREE.Vector3());
-                    console.log("Mesh Size:", size);
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = (maxDim > 0) ? 50 / maxDim : 1;
-
-                    this.mesh.scale.set(scale, scale, scale);
-                    this.mesh.updateMatrix();
-
-                    this.mesh.position.y = (size.y * scale) / 2;
-
                     this.scene.add(this.mesh);
+
+                    // Auto-Fit Camera (Non-destructive)
+                    this.fitCameraToMesh();
 
                     // Re-init Raycaster
                     this.raycaster = new THREE.Raycaster();
@@ -755,4 +746,39 @@ export class ModelViewer {
 
         this.renderer.render(this.scene, this.camera);
     }
+}
+fitCameraToMesh() {
+    if (!this.mesh) return;
+
+    // 1. Get Bounding Box
+    const box = new THREE.Box3().setFromObject(this.mesh);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    // 2. Calculate distance to fit
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = this.camera.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // rough estimate
+
+    // Multiplier for padding (1.5x)
+    cameraZ *= 2.0;
+
+    // 3. Move Camera
+    // Position camera generally 'up and away' like standard ISO view
+    const offset = cameraZ;
+
+    // Use GSAP for smooth transition if needed, or set directly
+    this.camera.position.set(center.x + offset, center.y + offset, center.z + offset);
+
+    // 4. Update Controls
+    this.controls.target.copy(center);
+    this.controls.update();
+
+    // Adjust near/far planes to avoid clipping on huge/tiny objects
+    this.camera.near = maxDim / 1000;
+    this.camera.far = maxDim * 100;
+    this.camera.updateProjectionMatrix();
+
+    console.log("Auto-fitted camera to mesh of size:", maxDim);
+}
 }
