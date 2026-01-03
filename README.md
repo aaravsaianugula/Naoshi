@@ -15,20 +15,19 @@
 
 ## 🚀 Quick Start (Windows)
 
-The easiest way to get started is using the **One-Click Installer**.
+The easiest way to get started is using the **One-Line Installer**.
 
-1.  **Download**:
-    -   Click the green **Code** button above -> **Download ZIP**.
-    -   Extract the ZIP folder to your Desktop or preferred location.
+**Option 1: PowerShell Command (Recommended)**
+Open PowerShell and run:
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/aaravsaianugula/Mesher/main/install.ps1 | iex"
+```
+This will automatically download, install (to `%LOCALAPPDATA%`), and create a Desktop shortcut.
 
-2.  **Install**:
-    -   Double-click **`install.bat`** (Run this once).
-    -   This script will automatically set up the Python environment and install all necessary dependencies.
-    -   It will create a **Mesher** shortcut on your Desktop.
-
-3.  **Run**:
-    -   Double-click the **Mesher** shortcut on your Desktop.
-    -   The app will open in your default browser at `http://localhost:8000`.
+**Option 2: Manual Install**
+1.  Download the ZIP from GitHub and extract it.
+2.  Run `install.bat`.
+3.  Open the **Mesher** shortcut on your Desktop.
 
 ---
 
