@@ -747,6 +747,7 @@ export class ModelViewer {
         this.renderer.render(this.scene, this.camera);
     }
 }
+
 fitCameraToMesh() {
     if (!this.mesh) return;
 
