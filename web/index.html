@@ -31,6 +31,14 @@
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
   <link rel="stylesheet" href="./style.css">
+  <script>
+    window.addEventListener('error', function (e) {
+      alert("System Error: " + e.message + "\nFile: " + e.filename + "\nLine: " + e.lineno);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      alert("Promise Error: " + e.reason);
+    });
+  </script>
 </head>
 
 <body>
@@ -286,7 +294,7 @@
 
   </div>
 
-  <script type="module" src="/main.js"></script>
+  <script type="module" src="/main.js?v=1"></script>
 </body>
 
 </html>

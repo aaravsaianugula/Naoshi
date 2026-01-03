@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import { ModelViewer } from './viewer.js';
-import { MeshEditor } from './mesh-editor.js';
+import { ModelViewer } from './viewer.js?v=1';
+import { MeshEditor } from './mesh-editor.js?v=1';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+
+// Debug Alert (Removed)
 
 class ZenMesher {
     constructor() {
