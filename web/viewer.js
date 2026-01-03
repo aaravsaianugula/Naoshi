@@ -764,17 +764,16 @@ export class ModelViewer {
         // 2. Calculate distance to fit
         const maxDim = Math.max(size.x, size.y, size.z);
         const fov = this.camera.fov * (Math.PI / 180);
-        let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // rough estimate
 
-        // Multiplier for padding (1.5x)
-        cameraZ *= 2.0;
+        // Correct formula: distance = size / (2 * tan(fov / 2))
+        let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
 
-        // 3. Move Camera
-        // Position camera generally 'up and away' like standard ISO view
-        const offset = cameraZ;
+        // Add padding (1.2x)
+        cameraZ *= 1.2;
 
-        // Use GSAP for smooth transition if needed, or set directly
-        this.camera.position.set(center.x + offset, center.y + offset, center.z + offset);
+        // 3. Move Camera (ISO View)
+        const isoVector = new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(cameraZ);
+        this.camera.position.copy(center).add(isoVector);
 
         // 4. Update Controls
         this.controls.target.copy(center);
