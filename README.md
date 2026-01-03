@@ -26,6 +26,11 @@ powershell -c "irm https://raw.githubusercontent.com/aaravsaianugula/Naoshi/main
 ```
 This will automatically download, install (to `%LOCALAPPDATA%`), and create a Desktop shortcut.
 
+> **💡 Troubleshooting**: If you see an error about "running scripts is disabled", try running this instead:
+> ```powershell
+> powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/aaravsaianugula/Naoshi/main/install.ps1 | iex"
+> ```
+
 ### Option 2: Manual Install
 1. Download the ZIP from GitHub and extract it.
 2. Run `install.bat`.
